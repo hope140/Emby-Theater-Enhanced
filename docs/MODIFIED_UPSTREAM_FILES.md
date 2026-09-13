@@ -16,3 +16,5 @@
 | `src/electronapp/wakeonlan/wakeonlan-native.js`、`wakeonlan.js` | JavaScript |
 
 未公开的 B 类文件：`src/electronapp/package.json`、`plugins/mpvplayer/strings/en-US.json`、`plugins/mpvplayer/strings/zh-CN.json`。这些 JSON 文件不能以注释方式安全承载修改说明，且公开基线本身不承诺可独立构建，故在获得更精确的来源/修改记录前不纳入。
+
+CloudDrive2 PR #2 继续不公开完整 `www` snapshot。`tools/patch-playbackmanager.cjs` 在本地构建时对 `www/modules/common/playback/playbackmanager.js` 应用锚点唯一的 request-generation overlay；源 snapshot 仍来自已校验 vendor，脚本在锚点缺失或重复时拒绝构建。新增的 `enhanced/cd2-service.js`、`enhanced/cd2-ipc.js`、`resolvers/cd2-resolver.js` 与最小 proto 是 Enhanced 自有维护文件。

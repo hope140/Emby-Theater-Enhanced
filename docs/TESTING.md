@@ -8,7 +8,33 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1
 python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv/x64/mpv-1.dll
 ```
 
-单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁，以及 STRM Resolver 的判定、优先级、媒体扩展 allowlist、路径推导、命中和 fallback。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包执行验证。
+单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁，以及 STRM/CD2 Resolver 的判定、mapping、RPC 错误、deadline、cancel/late callback、URL 校验、CD2 → Mount → Native 和 Transcode。当前为 33/33。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包执行验证。
+
+## CloudDrive2 PR #2
+
+最终候选 runtime 为 `EmbyTheaterEnhanced-0.1.1-cd2-resolver-pr2-k`，重复构建为 `pr2-l`。依赖/transport smoke：
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE = '1'
+dist/EmbyTheaterEnhanced-0.1.1-cd2-resolver-pr2-k/x64/electron/electron.exe tools/cd2-runtime-smoke.cjs dist/EmbyTheaterEnhanced-0.1.1-cd2-resolver-pr2-k
+Remove-Item Env:ELECTRON_RUN_AS_NODE
+```
+
+该 smoke 在 frozen Electron 18.3.15 / Node 16.13.2 中加载 grpc-js 1.14.4、proto-loader 0.8.1 和最小 proto，启动本地 fake gRPC server，验证 Bearer metadata、`FindFileByPath`、`GetDownloadUrlPath(false)`、deadline、URL result 与 0 native addon。
+
+CD2 hit、Mount fallback 和 Native fallback 必须串行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1 -RuntimeName EmbyTheaterEnhanced-0.1.1-cd2-resolver-pr2-k -Visible -TestPipeline -TestMount -TestCd2
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1 -RuntimeName EmbyTheaterEnhanced-0.1.1-cd2-resolver-pr2-k -Visible -TestPipeline -TestMount -TestCd2Miss
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1 -RuntimeName EmbyTheaterEnhanced-0.1.1-cd2-resolver-pr2-k -Visible -TestPipeline -TestCd2Miss
+```
+
+CD2 hit 结果：普通视频保持 native；STRM source 切到 fake same-origin URL；Item/MediaSource/MediaSourceId/PlaySessionId、Pause/Seek/Unpause/NextTrack/Stop 与 19 条报告保持；7 次 resolve 中 3 次 active call 被新 Play/双 NextTrack/Stop 取消，退出时 0 active；旧请求、旧 `core-playing` listener、late result 与 unhandled rejection 均未影响最新 source。两个 miss 夹具分别验证 Mount 与 Native。
+
+真实 CD2 smoke 只从本机既有配置在内存读取 token，并用临时环境变量提供一条 mapping。`tools/cd2-real-smoke.cjs` 仅调用两个 V1 RPC、HEAD 和单字节 Range；最终结果为 mapping hit、same-origin HTTP、HEAD 200、Range 206、无重定向。真实路径、URL、query、token、媒体名与账号不写入仓库或公开 evidence。
+
+真实 CD2 source 也已进入隔离 PlaybackManager → libmpv，超时证据确认 `currentSrc` 为 CD2 origin；但选定媒体在 45 秒内未进入 `core-playing`。因此 real Enhanced CD2 playback、真实 Emby Session/WebSocket/controls/reports 均保持 pending。
 
 test-runtime 使用真实 frozen Electron，独立 profile 和 APPDATA，不读取现有客户端登录信息。检查 Web 应用就绪、libmpv 注册及 externalplayer 未注册。隐藏窗口可能不生成可用截图，因此脚本如实记录 screenshotAvailable，不将空 PNG 视为视觉验收。
 
@@ -61,6 +87,12 @@ UI/runtime 测试必须串行执行。测试输出只保留在 `.work` 隔离目
 | 真实普通视频与 STRM Native | 两集 STRM DirectStream 通过，普通文件库内无样本 |
 | 真实 Session/远控/WatchTogether | 实服命令、WebSocket、客户端与服务端回读通过；WatchTogether 按用户确认的后台控制口径 |
 | 配置隔离、缓存诊断、GPU 输出 | MPV_HOME 标记与 5 档容量通过；gpu-next/D3D11 已取得，真实 shader/HDR 待验收 |
+| CD2 unit/fake | 33/33；fake gRPC/HTTP、mapping、deadline、cancel/late、URL 校验与 fallback 通过 |
+| CD2 frozen runtime | grpc-js/proto-loader require、fake unary/metadata、CD2 hit、Mount/Native fallback、generation/controls/reports 通过 |
+| CD2 可重复构建 | `pr2-k/l` 各 2156 个 manifest 载荷，逐文件 SHA256 0 差异；0 runtime native addon |
+| CD2 installer payload | 隔离编译/解包，2157 个 `{app}` 文件与 runtime 逐哈希一致；未执行系统安装 |
+| 真实 CD2 只读 smoke | mapping/RPC/same-origin URL/HEAD 200/Range 206 通过；无 refresh 或设置修改 |
+| 真实 Enhanced + CD2 media | source replacement 已确认；45 秒未到 `core-playing`，未通过 |
 
 后续可见测试结果及最新状态以 PROJECT_STATUS 和 DEVELOPMENT_LOG 为准。隔离 runtime 的 Mount 命中不替代真实 Emby 服务器 Mount 验收。
 

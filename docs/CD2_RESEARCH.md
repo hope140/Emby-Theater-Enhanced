@@ -707,3 +707,20 @@ Thinking: High
 Escalated: yes, from the prior Tier 1 research because this review spans gRPC packaging, PlaybackManager/libmpv async lifecycle, HTTP header isolation and native fallback.
 Recommended model for implementation: GPT-5.6 Sol High
 ```
+
+## 16. PR #2 implementation result
+
+`feat/cd2-resolver` implements the reviewed V1 boundary without DirectUrl:
+
+- exact `@grpc/grpc-js@1.14.4` + `@grpc/proto-loader@0.8.1` in Electron main;
+- trusted `resolve/cancel` IPC only; token and Bearer metadata stay in main;
+- one drive/UNC-safe local prefix → POSIX cloud prefix mapping;
+- `FindFileByPath` + `GetDownloadUrlPath(get_direct_url=false)` only;
+- same-origin scheme/host/port and placeholder validation;
+- readiness 200ms, Find 350ms and download 300ms under one 750ms deadline;
+- PlaybackManager request id + libmpv generation + unary cancel + stale listener cleanup;
+- CD2 miss → Mount → Native and Transcode → Native.
+
+The minimal proto SHA256 is `dbd103f5530863d7ef3726ef7c39e4a686e960296a750389bbf454cc252accb6`. The official current download reported schema 1.0.14; descriptor/field inspection found the two V1 RPCs and used field numbers unchanged from the verified 1.0.13 source. Runtime packaging copies 33 production JavaScript packages and contains no `.node` addon.
+
+Validation reached Node 33/33, frozen Electron fake gRPC/HTTP, CD2 hit, both fallback paths, three active-call cancellations, double NextTrack, Stop and unchanged PlaybackManager identities/reports. Real CD2 read-only mapping/RPC/HEAD 200/Range 206 passed. A real CD2 source became the isolated libmpv `currentSrc`, but did not reach `core-playing` within 45 seconds; real Enhanced media playback and real Emby Session/control remain pending. No CD2 setting, mount, cache, account, media or server state was modified.

@@ -8,6 +8,8 @@ Emby Theater Enhanced 是非官方的社区维护项目，与 Emby 不存在隶�
 
 第一轮已建立源码、输入清单、构建脚本、Inno 安装包、播放/远控审计与容错诊断。本地测试、实际安装生命周期、真实 STRM 播放及服务器后台控制均已通过；WatchTogether 按用户确认的后台控制口径验收。普通文件库内无样本，完整结果见 [LIVE_ACCEPTANCE](docs/LIVE_ACCEPTANCE.md) 和 [PROJECT_STATUS](docs/PROJECT_STATUS.md)。
 
+当前 `feat/cd2-resolver` 候选在原 PlaybackManager/Session 链内增加 CloudDrive2 same-origin HTTP source，失败顺序为 Mount → Native，Transcode 保持 Native。自动、fake、frozen runtime 和真实 CD2 只读解析已通过；真实 CD2 media 起播与真实 Emby Session/控制仍待验收，不能视为已发布能力。
+
 ## 使用本地构建
 
 > `v0.1.1-baseline` 是 source-governance baseline，不是 clone 后即可完整再现发行产物的源码包。本地构建仍依赖未公开的已锁定 runtime/input；完整离线 Web snapshot、native binary 和 vendor 输入因来源及再分发许可尚待确认而未公开。二进制 Release 仅会在这些组件完成来源、许可和对应源码义务审计后开放。
@@ -32,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -RuntimeNa
 
 已有输出不会被覆盖；重复构建用 `-OutputName EmbyTheaterEnhanced-next-win-x64`。构建只使用本地已校验 vendor，不联网下载或升级 Electron。初次复现需要两个原始归档；哈希见 `vendor/runtime-manifest.json`。
 
-`src/electronapp` 是维护入口；`vendor` 记录来源和文件哈希；`tools` 负责构建、测试；`docs` 记录已确认结论与待验收内容。根 package.json 只用于开发工具，不是 Electron 运行时依赖安装入口。
+`src/electronapp` 是维护入口；`vendor` 记录来源和文件哈希；`tools` 负责构建、测试；`docs` 记录已确认结论与待验收内容。根 `package.json` 同时锁定开发工具和需要复制进 frozen Electron 的纯 JavaScript runtime 依赖；`tools/build.ps1` 只复制 lockfile 中的 production closure，并拒绝 native addon。
 
 ## 后续阅读
 

@@ -28,3 +28,8 @@
 26. 当前 Pepper bridge 的 command 路径会把每个参数转为字符串后调用 `mpv_command`，不能传 `MPV_FORMAT_NODE_MAP`。mpv 0.41 的 `loadfile ... -1 <options>` 可以承载 file-local 选项并在文件结束后恢复，但任意 header 的字符串编码和 bridge 实机行为必须单独验收，不能改全局 User-Agent 后立即清理。
 27. 同步 Mount Resolver 改成异步 CD2 lookup 后，deadline 只能限制资源占用，不能阻止 late response 覆盖新播放。PlaybackManager 请求、libmpv `loadfile`、NextTrack 与 Stop 必须共享 generation/request id，并在每个 await 后和最终 `loadfile` 前复核。
 28. `@grpc/grpc-js` 可在当前 Electron 18.3.15 内置 Node 16.13.2 中以纯 JavaScript 完成带 Bearer metadata 和 deadline 的真实只读 RPC；`grpc-web` 使用不同 wire protocol，直连原生 CD2 gRPC 仍需要代理，不适合作为本项目 V1 transport。
+29. grpc/proto 的首次同步 require 与 schema 解析可能接近 1 秒，JavaScript timer 无法抢占这段冷加载；CD2 enabled 时应在 main 启动阶段预加载 transport，让 750ms playback budget 只承担 readiness 与 RPC。
+30. 仅在 libmpv 拒绝旧 generation 还不够：旧 PlaybackManager 请求可能在到达 `player.play` 前先停止新播放器。request id 必须在 PlaybackManager 的 preplay、bitrate、device profile、PlaybackInfo 和最终 player 调用边界复核。
+31. CloudDrive2 drive-letter mount point 可能返回 `X:`；作为绝对 mapping root 使用时必须规范化为 `X:\`。`X:folder` 是当前盘符相对路径，应该继续拒绝。
+32. 可见 frozen Electron media fixture 必须串行；并行运行会竞争 Pepper/GPU/窗口资源并产生无关超时。失败后先核对残留进程，再用相同参数串行复跑。
+33. “CD2 URL 已成为 currentSrc”只证明 source replacement；没有 `core-playing`、控制和报告证据时，不能写成真实 Enhanced CD2 playback 通过。

@@ -42,6 +42,8 @@ EmbyWatchTogether 兼容性的必要条件是身份、Item、PlaySession、WebSo
 
 当前 Mount Resolver 在 `libmpv.playInternal` 内同步执行，成功时只改变 Embedded libmpv 的最终 `loadfile` source。隔离 PlaybackManager 夹具已验证 Mount 命中时 Item.Path、MediaSource.Path、PlaySessionId、播放上报和 Pause/Seek/Unpause/Stop/NextTrack 仍保持原链路；这项证据不等同于真实服务器上的 Mount 样本验收。
 
+CD2 Resolver 将 source 查询改为异步，但继续只替换最终 `loadfile` source。PlaybackManager request id 与 libmpv generation 共同覆盖 Play/NextTrack/Stop/destroy；旧请求不会调用旧 `onPlaybackStarted` 或 error recovery。frozen Electron fixture 已验证 CD2 hit 时 Item、MediaSource、MediaSourceId、PlaySessionId、Pause/Seek/Unpause/NextTrack/Stop 和 19 条报告保持一致，并验证 7 次异步 resolve 中 3 次 active call 被取消、退出时 0 active。该证据仍是内存 Emby API/消息 fixture，不代表真实服务器 Session。
+
 ## 待验收
 
 0.1.1 已新增客户端集成验证：真实 PlaybackManager 与 ApiClient 报告序列化处理普通视频和 STRM fixture，真实 input/api.js 消息分派触发 Pause/Unpause/Seek/Stop/NextTrack。报告保留 ItemId、MediaSourceId、PlaySessionId，开始/进度/结束均存在，Next 正常换项。API 回应、报告递送和消息投递均为内存 fixture，因此不将该结果写成真实服务器 Session 或真实 WebSocket 已通过。

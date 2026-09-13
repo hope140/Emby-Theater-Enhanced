@@ -1,5 +1,26 @@
 # 开发日志
 
+## 2026-09-13 — CloudDrive2 Resolver PR #2 实现与验证
+
+从已推送的 `main` 文档基线 `6888780` 创建 `feat/cd2-resolver`。本轮实现 `CD2 same-origin HTTP → Mount → Native`，Transcode 永远 Native；没有实现 DirectUrl、User-Agent/additionalHeaders、expiresIn recovery、115 Open API、refresh/retry、复杂 mapping、设置 UI、自动发现或 cache 管理。
+
+产品实现：精确锁定 `@grpc/grpc-js@1.14.4` 与 `@grpc/proto-loader@0.8.1`；Electron main process 持有 token、proto、channel、metadata 与 active calls，renderer 只通过可信 sender 的 `resolve/cancel` IPC。main 完成同步读取/预加载后立即删除 `process.env` 中全部 `ETE_CD2_*` 输入，防止 renderer 继承 token、origin 或 mapping。V1 使用 Apache-2.0 ETLP beta 快照中的最小 CloudDrive2 1.0.13 wire schema，SHA256 固定；官方下载的 1.0.14 proto 已做 diff，两个 V1 RPC 与关键 field numbers 未变化。单条 mapping 支持 drive/UNC、大小写不敏感、严格边界、拒绝 `..`，cloud path 使用 POSIX normalize。只调用 `FindFileByPath` 与 `GetDownloadUrlPath(get_direct_url=false)`，只接受同 scheme/host/port HTTP(S) URL。
+
+异步生命周期：PlaybackManager build overlay 为每次播放生成 request id，并在异步阶段和 `player.play` 前拒绝 stale request；libmpv 在 `self.play` 开头同步建立 monotonic generation/AbortController。新 Play、NextTrack、Stop、destroy 会 invalidate 旧 generation、取消 active unary call并移除旧 `core-playing` listener；每个 await、fallback、`currentSrc` 与 `loadfile` 前复核。readiness 200ms、Find 350ms、download 300ms 共用 750ms absolute budget；grpc/proto 在 CD2 enabled 时于 main 启动预加载，connection-refused 的 playback 阶段断言在 500ms 内 fallback，冷 require/parse 时间不计入起播 budget。
+
+自动验证：Node 33/33；修改 JS 与 build overlay 输出语法通过。fake HTTP 覆盖 200/206/404/500/timeout/307；fake gRPC 覆盖 found/missing/directory/UNAVAILABLE/deadline/slow/late/malformed/cancel。frozen Electron 18.3.15 / Node 16.13.2 中 grpc-js/proto-loader require、Bearer metadata、两个 unary RPC、same-origin result 和 0 native addon 通过。CD2 hit fixture 验证 7 resolve、3 active cancel、0 active leak，A→B、Stop、旧 core listener、双 NextTrack 只允许最新 source；Play/Pause/Seek/Unpause/NextTrack/Stop、Item/MediaSource/MediaSourceId/PlaySessionId 与 19 条模拟报告保持。CD2 miss → Mount 与 CD2 miss → Native 分别通过。
+
+构建与 installer：最终 `pr2-k/l` 各 2156 个 manifest 载荷，逐文件 SHA256 0 差异；连 build-manifest 共 2157 文件，production closure 为 33 个纯 JS package、0 `.node` addon。隔离 Inno setup 编译成功，SHA256 `7db35eb258a4c245e04c55fc3fa04d34ee18724be650330fdb581ecbf76cd515`；innounp 解包的 2157 个 `{app}` 文件与 `pr2-k` runtime 全部逐哈希一致。本轮未运行 installer 或修改系统安装。
+
+真实 CD2：仅在内存读取既有 token，临时 mapping 命中；最终 frozen runtime 的 `FindFileByPath`、`GetDownloadUrlPath(false)`、same-origin HEAD 200、Range 206、无重定向通过。没有修改 CD2 设置、mount、cache、账号或网盘数据。真实 CD2 source 已在隔离播放器中成为 `currentSrc`，但同一样本在 45 秒内未产生 `core-playing`；因此 real Enhanced CD2 playback 未通过，真实 Emby Session/WebSocket/controls/reports 未执行。两次此类超时均保留在 ignored `.work`，不写入公开敏感细节。
+
+曾有一次并行启动两个可见 Electron fixture 导致 Mount suite 超时；按既有规则清理确认 0 残留进程后串行重跑通过。另有测试编排的 drive-root 与拼写错误在发出媒体请求前安全失败，修正后真实只读 smoke 通过，均未当作产品成功证据。
+
+Model Tier: 2
+Model: GPT-5.6 Sol
+Reason: main-process gRPC, renderer/main IPC, PlaybackManager and libmpv generation, native fallback and frozen runtime packaging span multiple layers
+Escalated: no; this task started at the approved Tier 2 level
+
 ## 2026-09-13 — CloudDrive2 Resolver Sol High 架构评审
 
 在 `main == origin/main == 7670d42`、工作区仅有既有调研文档改动的基线上完成 Tier 2 / Sol High 评审。本轮没有修改 `src/`、`package.json`、CD2 配置/mount/cache、Emby/服务器配置或网盘数据，没有执行 refresh、真实 Enhanced 播放、分支、commit、PR、发布或安装。
