@@ -301,6 +301,12 @@
         var nativeSource = context && context.nativeSource;
         var fileSystem = getFileSystem(dependencies);
         var visited = visitCandidates(context, dependencies, function (candidate) {
+            // Absolute POSIX paths can be server-side source identities on a
+            // Windows client. They remain CD2 candidates, but must never be
+            // probed through the local Windows filesystem.
+            if (isPosixLocalPath(candidate)) {
+                return null;
+            }
             return exists(fileSystem, candidate)
                 ? makeResult('local', candidate, 'mount_hit', true)
                 : null;

@@ -273,6 +273,61 @@ test('absolute POSIX media source is a deterministic CD2 candidate', async () =>
     }
 });
 
+test('a POSIX source candidate never enters the Mount existsSync flow after a CD2 miss', async () => {
+    const fixture = createFixture('Episode.strm', '/srv/media/Show/E01.mkv');
+    const probed = [];
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {
+            fs: {
+                existsSync: value => {
+                    probed.push(value);
+                    return value === fixture.sourcePath;
+                }
+            },
+            requestId: 'posix-miss',
+            cd2Transport: {
+                resolve: async request => {
+                    assert.deepEqual(request.candidates, [fixture.sourcePath]);
+                    return {status: 'miss', reason: 'unavailable'};
+                }
+            }
+        });
+
+        assert.equal(result.type, 'native');
+        assert.equal(result.source, fixture.nativeSource);
+        assert.equal(result.cd2Reason, 'unavailable');
+        assert.deepEqual(probed, []);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('UNC local source paths still resolve through Mount when they exist', () => {
+    const fixture = createFixture('Mounted.strm', '\\\\server\\share\\Mounted.mkv');
+    const sourcePath = '\\\\server\\share\\Mounted.mkv';
+    const result = strmResolver.resolve({
+        item: {Path: fixture.sidecarPath},
+        mediaSource: {Path: sourcePath, Container: 'strm'},
+        url: fixture.nativeSource,
+        playMethod: 'DirectPlay'
+    }, {
+        fs: {existsSync: value => value === sourcePath}
+    });
+
+    try {
+        assert.equal(result.type, 'local');
+        assert.equal(result.source, sourcePath);
+        assert.equal(result.reason, 'mount_hit');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
 test('async STRM resolution prefers CD2 URL over an existing Mount candidate', async () => {
     const fixture = createFixture('Movie.mkv.strm');
     const local = path.join(fixture.directory, 'Movie.mkv');

@@ -14,6 +14,11 @@ window.eteAcceptance = (function(){
         }
         return 'other';
     }
+    function localPrefixMatches(value, prefix){
+        if(typeof value!=='string'||typeof prefix!=='string'||!prefix)return false;
+        var root=prefix.replace(/[\\/]+$/,'');
+        return value===root||value.indexOf(root+'/')===0;
+    }
     async function until(fn,limit=15000){
         const start=Date.now();
         while(Date.now()-start<limit){const value=await fn();if(value)return value;await wait(700);}
@@ -81,7 +86,7 @@ window.eteAcceptance = (function(){
                 Fields:'Path,MediaSources',SortBy:'DateCreated',SortOrder:'Descending',Filters:'IsUnplayed'});
             items=result.Items.filter(item=>typeof item.Path==='string'&&item.Path.toLowerCase().endsWith('.strm')&&item.RunTimeTicks>1200000000).slice(0,2);
             if(items.length<2)return {ok:false,reason:'not-enough-strm-samples',scanned:result.Items.length};
-            return {ok:true,scanned:result.Items.length,samples:items.map(i=>{const source=(i.MediaSources||[])[0]||{};return {id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,itemPathKind:sourceKind(i.Path),sourceCount:i.MediaSources&&i.MediaSources.length,sourcePathKind:sourceKind(source.Path),container:String(source.Container||'').toLowerCase()||'missing'};})};
+            return {ok:true,scanned:result.Items.length,samples:items.map(i=>{const source=(i.MediaSources||[])[0]||{};return {id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,itemPathKind:sourceKind(i.Path),itemPathPrefixMatch:localPrefixMatches(i.Path,window.__eteExpectedCd2LocalPrefix),sourceCount:i.MediaSources&&i.MediaSources.length,sourcePathKind:sourceKind(source.Path),sourcePathPrefixMatch:localPrefixMatches(source.Path,window.__eteExpectedCd2LocalPrefix),container:String(source.Container||'').toLowerCase()||'missing'};})};
         },
         async play(){
             authorizedPlayback=true;

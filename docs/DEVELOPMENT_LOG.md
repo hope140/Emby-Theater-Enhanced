@@ -1,5 +1,20 @@
 # 开发日志
 
+## 2026-09-14 — persistent profile inspect 修正与 PR #2 真实验收复核
+
+保持 `feat/cd2-resolver`，先复核 worker 未提交 diff，再补充 persistent profile inspect 的 targeted test 和 POSIX Mount 边界回归。`inspectAcceptanceProfile` 现在必须同时取得 API client 并成功解析 `getCurrentUser()` 用户对象才报告 `loggedIn=true`；拒绝、超时、空用户、缺少 API、loader/client 异常统一收敛为安全枚举，结果字段仅有 `loggedIn` 与 `reason`。`accept-live.ps1` 使用 LocalApplicationData 下的固定 acceptance profile，profile 不存在、inspect 失败和手动登录入口均不回显 profile 路径或认证材料。
+
+POSIX 回归确认 absolute `MediaSource.Path` 仍作为 CD2 candidate 发送；CD2 miss 后不会进入 Windows `existsSync` Mount flow。UNC source 仍可在存在时命中 Mount。Node tests 为 43/43，JS/PowerShell 语法和 `git diff --check` 通过；当前工作区源码构建的隔离 runtime 为 2156 个 manifest payload（含 `build-manifest.json` 共 2157 个文件），runtime `mount-resolver.js` 与 source hash 一致并包含 POSIX guard。
+
+同一个 persistent profile 的真实 inspect 返回 `logged-in`。随后真实 Emby acceptance 选择两个 POSIX STRM 样本，inspect、Session/WebSocket、Play、Pause、Seek、Resume、NextTrack、Stop 和 10 条真实播放报告全部通过；resolver 两次记录 `cd2=mapping_miss` → `mount_missing` → native URL。脱敏 select 复核显示两个 `Item.Path` 命中当前 sidecar 前缀，但两个 `MediaSource.Path` 未命中当前 source-side mapping，因此没有把 native fallback 记为真实 CD2 source hit。
+
+当前剩余 blocker 是与实际 `MediaSource.Path` 匹配的 POSIX→CD2 source mapping 未确认。没有修改服务器、CD2、mount、cache、账号、媒体库或网盘数据；没有发现新的跨层生命周期、Session identity 或 PlaybackManager/libmpv correctness 问题，没有升级到 Sol High。
+
+Model Tier: 2
+Model: current Codex session
+Reason: persistent acceptance, real Emby Session/WebSocket/control evidence, and resolver source-identity boundary
+Escalated: no
+
 ## 2026-09-13 — PR #2 merge-blocker 修正与真实媒体诊断
 
 保持 `feat/cd2-resolver`，没有同步 `origin/main`，也没有修改另一会话正在维护的 `AGENTS.md` 或 `docs/AI_MODEL_POLICY.md`。本轮关闭三个代码 blocker：仅 terminal `PlaybackManager.prototype.stop()` 增加 request invalidation，新 Play 内部 previous-player stop 不受影响；非 Abort 的 IPC/transport reject 转为安全 `transport_error` miss 后继续 Mount → Native，Abort 仍向上终止；空/缺失 cloudPrefix 为 `missing_mapping`，显式 `/` 保持合法。
