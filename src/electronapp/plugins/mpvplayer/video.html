@@ -1,0 +1,121 @@
+﻿<div is="emby-scroller" class="view flex flex-direction-column scrollFrameY flex-grow" data-mousewheel="true" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="card" data-bindheader="true">
+    <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page settingsContainer">
+        <form class="auto-center">
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectVideoOut" label="${LabelVideoOutput}">
+                    <option value="">${Auto}</option>
+                    <option value="libmpv">LibMPV</option>
+                    <option value="gpu">GPU</option>
+                    <option value="gpu-next">GPU-Next</option>
+                </select>
+                <div class="fieldDescription">${VideoOutputHelp}</div>
+            </div>
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectGpuApi" label="${LabelGpuApi}">
+                    <option value="">${Auto}</option>
+                    <option value="opengl">OpenGL</option>
+                    <option value="vulkan">Vulkan</option>
+                    <option value="d3d11">Direct3D 11</option>
+                </select>
+                <div class="fieldDescription">${LabelGpuApiHelp}</div>
+            </div>
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectHwaMode" label="${LabelHardwareAccelerationMode}">
+                    <option value="">${Auto}</option>
+                    <option value="dxva2">DXVA2</option>
+                    <option value="dxva2-copy">DXVA2 (Copy-Back)</option>
+                    <option value="d3d11va">D3D11VA</option>
+                    <option value="d3d11va-copy">D3D11VA (Copy-Back)</option>
+                    <option value="nvdec">NVIDIA NVDEC (Vulkan)</option>
+                    <option value="nvdec-copy">NVIDIA NVDEC (Copy-Back)</option>
+                    <option value="unset">自定义 (%appdata%\mpv\mpv.conf)</option>
+                    <option value="no">关闭</option>
+                </select>
+                <div class="fieldDescription">${LabelHardwareAccelerationHelp}</div>
+            </div>
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectNominalRange" label="${LabelOutputRange}">
+                    <option value="">${Auto}</option>
+                    <option value="full">PC (0-255)</option>
+                    <option value="limited">TV (16-235)</option>
+                </select>
+                <div class="fieldDescription">${LabelOutputRangeHelp}</div>
+            </div>
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectDeinterlace" label="${EnableDeinterlacing}">
+                    <option value="">${Auto}</option>
+                    <option value="yes">${Yes}</option>
+                    <option value="no">${No}</option>
+                </select>
+            </div>
+
+            <h1>${Advanced}</h1>
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectNetworkCache" label="${LabelNetworkCache}">
+                    <option value="">${Auto}</option>
+                    <option value="300MiB">常规 (300MB)</option>
+                    <option value="600MiB">中等 (600MB)</option>
+                    <option value="900MiB">最大 (900MB)</option>
+                    <option value="3072MiB">超大 (3072MB)</option>
+                </select>
+                <div class="fieldDescription">${LabelNetworkCacheHelp}</div>
+            </div>
+
+            <div class="inputContainer">
+                <input is="emby-input" type="number" step="1" class="txtDefaultAudioDelay"
+                       label="${DefaultAudioDelay}" />
+                <div class="fieldDescription">${DefaultAudioDelayHelp}</div>
+            </div>
+
+            <div class="inputContainer">
+                <input is="emby-input" type="number" step="1" class="txtAudioDelay2325" label="${AudioDelay2325}" />
+                <div class="fieldDescription">${AudioDelay2325Help}</div>
+            </div>
+
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label>
+                    <input type="checkbox" is="emby-checkbox" class="chkRefreshRateMode" />
+                    <span>${EnableDisplayRefreshRateSwitching}</span>
+                </label>
+                <div class="fieldDescription checkboxFieldDescription">${EnableDisplayRefreshRateSwitchingHelp}</div>
+            </div>
+
+            <div class="inputContainer">
+                <input is="emby-input" type="text" step="1" class="txtUserRefreshRate" label="${UserRefreshRate}" />
+                <div class="fieldDescription">${UserRefreshRateHelp}</div>
+            </div>
+
+            <div class="selectContainer">
+                <select is="emby-select" class="selectVideoSync" label="${EnableVideoDisplaySyncing}">
+                    <option value="">${Auto}</option>
+                    <option value="display-resample">${DisplayResample}</option>
+                    <option value="display-vdrop">${DisplayVDrop}</option>
+                </select>
+                <div class="fieldDescription">${EnableVideoDisplaySyncingHelp}</div>
+            </div>
+
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label>
+                    <input type="checkbox" is="emby-checkbox" class="chkOpenglhq" />
+                    <span>${EnableOpenGlHq}</span>
+                </label>
+                <div class="fieldDescription checkboxFieldDescription">${SettingRequiresHighEnd}</div>
+            </div>
+
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label>
+                    <input type="checkbox" is="emby-checkbox" class="chkInterpolation" />
+                    <span>${EnableInterpolation}</span>
+                </label>
+                <div class="fieldDescription checkboxFieldDescription">${EnableInterpolationHelp}</div>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- Modified for Emby Theater Enhanced on 2026-09-12/13. Distributed under GPL-2.0-only; see LICENSE. -->

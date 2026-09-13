@@ -1,0 +1,1198 @@
+{
+  "recordedAt": "2026-09-13T02:23:36+08:00",
+  "version": "0.1.1",
+  "unitTests": {
+    "failed": 0,
+    "passed": 8
+  },
+  "media": {
+    "ok": true,
+    "versions": {
+      "node": "16.13.2",
+      "v8": "10.0.139.18-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.15",
+      "chrome": "100.0.4896.160"
+    },
+    "state": {
+      "title": "Emby",
+      "ready": true,
+      "textLength": 64,
+      "players": [
+        {
+          "id": "photoplayer",
+          "name": "Photo Player"
+        },
+        {
+          "id": "youtubeplayer",
+          "name": "Youtube Player"
+        },
+        {
+          "id": "libmpvmediaplayer",
+          "name": "libmpv"
+        },
+        {
+          "id": "remoteplayer",
+          "name": "Remote Control"
+        },
+        {
+          "id": "htmlaudioplayer",
+          "name": "Audio Player"
+        },
+        {
+          "id": "htmlvideoplayer",
+          "name": "Video Player"
+        }
+      ],
+      "screenshotAvailable": true,
+      "playback": {
+        "advanced": true,
+        "paused": true,
+        "sought": true,
+        "resumed": true,
+        "stopped": true
+      },
+      "probe": {
+        "config": {
+          "scale": "bilinear",
+          "font": "ETE-CONFIG-PROBE"
+        },
+        "cache": [
+          {
+            "mib": 900,
+            "raw": 943718400,
+            "precise": "943718400"
+          },
+          {
+            "mib": 2048,
+            "raw": -2147483648,
+            "precise": "2147483648"
+          },
+          {
+            "mib": 3072,
+            "raw": -1073741824,
+            "precise": "3221225472"
+          },
+          {
+            "mib": 4096,
+            "raw": 0,
+            "precise": "4294967296"
+          },
+          {
+            "mib": 8192,
+            "raw": 0,
+            "precise": "8589934592"
+          }
+        ]
+      }
+    }
+  },
+  "pipeline": {
+    "results": [
+      {
+        "kind": "video",
+        "playerId": "libmpvmediaplayer",
+        "paused": true,
+        "sought": true,
+        "resumed": true,
+        "itemSidecarPreserved": true,
+        "sourcePreserved": true,
+        "sessionPreserved": true,
+        "hasStart": true,
+        "hasProgress": true,
+        "hasStop": true,
+        "pauseReported": true,
+        "seekReported": true
+      },
+      {
+        "kind": "strm",
+        "playerId": "libmpvmediaplayer",
+        "paused": true,
+        "sought": true,
+        "resumed": true,
+        "itemSidecarPreserved": true,
+        "sourcePreserved": true,
+        "sessionPreserved": true,
+        "hasStart": true,
+        "hasProgress": true,
+        "hasStop": true,
+        "pauseReported": true,
+        "seekReported": true
+      }
+    ],
+    "next": {
+      "selected": true,
+      "priorStopped": true,
+      "nextStarted": true
+    },
+    "records": [
+      {
+        "endpoint": "/emby/Sessions/Playing",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1,
+          "NowPlayingQueue": [
+            {
+              "Id": "fixture-video",
+              "PlaylistItemId": "playlistItem0"
+            }
+          ]
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 333333,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": true,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 6333333,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "EventName": "pause",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": true,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 20000000,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 20000000,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "EventName": "unpause",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 20333333,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Stopped",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 22333333,
+          "PlaybackStartTimeTicks": 17892221385190000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-video",
+          "MediaSourceId": "source-fixture-video",
+          "CanSeek": true,
+          "ItemId": "fixture-video",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1,
+          "NextMediaType": null,
+          "NowPlayingQueue": []
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 1666666.6666666665
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1,
+          "NowPlayingQueue": [
+            {
+              "Id": "fixture-strm",
+              "PlaylistItemId": "playlistItem1"
+            }
+          ]
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 333333,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 1666666.6666666665
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": true,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 6333333,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "EventName": "pause",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": true,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 20000000,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 20000000,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "EventName": "unpause",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 20333333,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Stopped",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 22000000,
+          "PlaybackStartTimeTicks": 17892221402560000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-strm",
+          "MediaSourceId": "source-fixture-strm",
+          "CanSeek": true,
+          "ItemId": "fixture-strm",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 1,
+          "NextMediaType": null,
+          "NowPlayingQueue": []
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221419820000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-next-a",
+          "MediaSourceId": "source-fixture-next-a",
+          "CanSeek": true,
+          "ItemId": "fixture-next-a",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 2,
+          "NowPlayingQueue": [
+            {
+              "Id": "fixture-next-a",
+              "PlaylistItemId": "playlistItem2"
+            },
+            {
+              "Id": "fixture-next-b",
+              "PlaylistItemId": "playlistItem3"
+            }
+          ]
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Stopped",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221419820000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-next-a",
+          "MediaSourceId": "source-fixture-next-a",
+          "CanSeek": true,
+          "ItemId": "fixture-next-a",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 2,
+          "NextMediaType": "Video",
+          "NowPlayingQueue": [
+            {
+              "Id": "fixture-next-a",
+              "PlaylistItemId": "playlistItem2"
+            },
+            {
+              "Id": "fixture-next-b",
+              "PlaylistItemId": "playlistItem3"
+            }
+          ]
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Stopped",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221419820000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [
+            {
+              "start": 0,
+              "end": 49666666.666666664
+            }
+          ],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-next-a",
+          "MediaSourceId": "source-fixture-next-a",
+          "CanSeek": true,
+          "ItemId": "fixture-next-a",
+          "PlaylistIndex": 0,
+          "PlaylistLength": 2,
+          "NextMediaType": "Video",
+          "NowPlayingQueue": [
+            {
+              "Id": "fixture-next-a",
+              "PlaylistItemId": "playlistItem2"
+            },
+            {
+              "Id": "fixture-next-b",
+              "PlaylistItemId": "playlistItem3"
+            }
+          ]
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221420910000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-next-b",
+          "MediaSourceId": "source-fixture-next-b",
+          "CanSeek": true,
+          "ItemId": "fixture-next-b",
+          "PlaylistIndex": 1,
+          "PlaylistLength": 2
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 0,
+          "PlaybackStartTimeTicks": 17892221420910000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-next-b",
+          "MediaSourceId": "source-fixture-next-b",
+          "CanSeek": true,
+          "ItemId": "fixture-next-b",
+          "PlaylistIndex": 1,
+          "PlaylistLength": 2
+        }
+      },
+      {
+        "endpoint": "/emby/Sessions/Playing/Progress",
+        "body": {
+          "VolumeLevel": 100,
+          "IsMuted": false,
+          "IsPaused": false,
+          "RepeatMode": "RepeatNone",
+          "SubtitleOffset": "0",
+          "PlaybackRate": 1,
+          "MaxStreamingBitrate": 120000000,
+          "PositionTicks": 333333,
+          "PlaybackStartTimeTicks": 17892221420910000,
+          "SubtitleStreamIndex": -1,
+          "BufferedRanges": [],
+          "PlayMethod": "DirectPlay",
+          "PlaySessionId": "play-fixture-next-b",
+          "MediaSourceId": "source-fixture-next-b",
+          "CanSeek": true,
+          "ItemId": "fixture-next-b",
+          "EventName": "timeupdate",
+          "PlaylistIndex": 1,
+          "PlaylistLength": 2
+        }
+      }
+    ],
+    "calls": [
+      "PlaybackInfo",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "PlaybackInfo",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "PlaybackInfo",
+      "ensureWebSocket",
+      "PlaybackInfo",
+      "PlaybackInfo",
+      "ensureWebSocket",
+      "ensureWebSocket",
+      "ensureWebSocket"
+    ]
+  },
+  "diagnostics": [
+    {
+      "timestamp": "2026-09-12T14:11:11.625Z",
+      "stage": "runtime",
+      "versions": {
+        "electron": "18.3.15",
+        "chromium": "100.0.4896.160",
+        "node": "16.13.2"
+      },
+      "mpvConfig": {
+        "evidence": "candidate-files-not-load-trace",
+        "candidates": [
+          {
+            "source": "MPV_HOME",
+            "exists": true,
+            "sha256": "c4188384e1df520227aac85fb08b6a33b439e5412a7aed5c084d5b74537b3bf6"
+          },
+          {
+            "source": "portable_config",
+            "exists": false
+          },
+          {
+            "source": "WindowsKnownFolder",
+            "exists": true,
+            "sha256": "4b99a4ebf98a6f184bf48961342a18043b7ae9b4c389e1c89fde57c678ed253f"
+          },
+          {
+            "source": "executable_directory",
+            "exists": false
+          },
+          {
+            "source": "executable_mpv_directory",
+            "exists": false
+          }
+        ],
+        "environmentMatchesKnownFolder": false
+      }
+    },
+    {
+      "timestamp": "2026-09-12T14:11:19.259Z",
+      "stage": "ready",
+      "properties": {
+        "mpv-version": {
+          "status": "ok",
+          "value": "mpv v0.41.0-920-gdd5d17d32"
+        },
+        "libmpv-version": {
+          "status": "unavailable"
+        },
+        "mpv-build-date": {
+          "status": "unavailable"
+        },
+        "current-vo": {
+          "status": "unavailable"
+        },
+        "vo": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "gpu-next",
+              "params": {}
+            }
+          ]
+        },
+        "gpu-api": {
+          "status": "ok",
+          "value": []
+        },
+        "gpu-context": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "d3d11",
+              "params": {}
+            }
+          ]
+        },
+        "hwdec": {
+          "status": "ok",
+          "value": [
+            "no"
+          ]
+        },
+        "hwdec-current": {
+          "status": "unavailable"
+        },
+        "scale": {
+          "status": "ok",
+          "value": "bilinear"
+        },
+        "cscale": {
+          "status": "ok",
+          "value": 0
+        },
+        "dscale": {
+          "status": "ok",
+          "value": "hermite"
+        },
+        "tscale": {
+          "status": "ok",
+          "value": "oversample"
+        },
+        "deband": {
+          "status": "ok",
+          "value": false
+        },
+        "interpolation": {
+          "status": "ok",
+          "value": false
+        },
+        "video-sync": {
+          "status": "ok",
+          "value": "audio"
+        },
+        "target-colorspace-hint": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-trc": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-prim": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-peak": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "tone-mapping": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "gamut-mapping-mode": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "glsl-shaders": {
+          "status": "ok",
+          "configured": false,
+          "count": 0
+        },
+        "video-params": {
+          "status": "unavailable"
+        },
+        "video-out-params": {
+          "status": "unavailable"
+        },
+        "config": {
+          "status": "ok",
+          "value": true
+        },
+        "config-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "sub-font": {
+          "status": "ok",
+          "value": "ETE-CONFIG-PROBE"
+        },
+        "sub-fonts-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "demuxer-max-bytes": {
+          "status": "ok",
+          "transport": "mpv-text",
+          "legacyValue": -1073741824,
+          "value": 3221225472
+        }
+      }
+    },
+    {
+      "timestamp": "2026-09-12T14:11:19.376Z",
+      "stage": "playing",
+      "properties": {
+        "mpv-version": {
+          "status": "ok",
+          "value": "mpv v0.41.0-920-gdd5d17d32"
+        },
+        "libmpv-version": {
+          "status": "unavailable"
+        },
+        "mpv-build-date": {
+          "status": "unavailable"
+        },
+        "current-vo": {
+          "status": "ok",
+          "value": "gpu-next"
+        },
+        "vo": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "gpu-next",
+              "params": {}
+            }
+          ]
+        },
+        "gpu-api": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "d3d11",
+              "params": {}
+            }
+          ]
+        },
+        "gpu-context": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "d3d11",
+              "params": {}
+            }
+          ]
+        },
+        "hwdec": {
+          "status": "ok",
+          "value": [
+            "d3d11va"
+          ]
+        },
+        "hwdec-current": {
+          "status": "ok",
+          "value": "no"
+        },
+        "scale": {
+          "status": "ok",
+          "value": "bilinear"
+        },
+        "cscale": {
+          "status": "ok",
+          "value": 0
+        },
+        "dscale": {
+          "status": "ok",
+          "value": "hermite"
+        },
+        "tscale": {
+          "status": "ok",
+          "value": "oversample"
+        },
+        "deband": {
+          "status": "ok",
+          "value": false
+        },
+        "interpolation": {
+          "status": "ok",
+          "value": false
+        },
+        "video-sync": {
+          "status": "ok",
+          "value": "audio"
+        },
+        "target-colorspace-hint": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-trc": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-prim": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-peak": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "tone-mapping": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "gamut-mapping-mode": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "glsl-shaders": {
+          "status": "ok",
+          "configured": false,
+          "count": 0
+        },
+        "video-params": {
+          "status": "ok",
+          "value": {
+            "alpha": "none",
+            "aspect": 1,
+            "aspect-name": "Square",
+            "average-bpp": 12,
+            "chroma-location": "mpeg1/jpeg",
+            "colorlevels": "limited",
+            "colormatrix": "bt.601",
+            "crop-h": 64,
+            "crop-w": 64,
+            "crop-x": 0,
+            "crop-y": 0,
+            "dh": 64,
+            "dw": 64,
+            "gamma": "bt.1886",
+            "h": 64,
+            "light": "display",
+            "par": 1,
+            "pixelformat": "yuv420p",
+            "primaries": "bt.709",
+            "rotate": 0,
+            "sar": 1,
+            "sar-name": "Square",
+            "sig-peak": 0,
+            "stereo-in": "mono",
+            "w": 64
+          }
+        },
+        "video-out-params": {
+          "status": "ok",
+          "value": {
+            "alpha": "none",
+            "aspect": 1,
+            "aspect-name": "Square",
+            "average-bpp": 12,
+            "chroma-location": "mpeg1/jpeg",
+            "colorlevels": "limited",
+            "colormatrix": "bt.601",
+            "crop-h": 64,
+            "crop-w": 64,
+            "crop-x": 0,
+            "crop-y": 0,
+            "dh": 64,
+            "dw": 64,
+            "gamma": "bt.1886",
+            "h": 64,
+            "light": "display",
+            "par": 1,
+            "pixelformat": "yuv420p",
+            "primaries": "bt.709",
+            "rotate": 0,
+            "sar": 1,
+            "sar-name": "Square",
+            "sig-peak": 0,
+            "stereo-in": "mono",
+            "w": 64
+          }
+        },
+        "config": {
+          "status": "ok",
+          "value": true
+        },
+        "config-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "sub-font": {
+          "status": "ok",
+          "value": "ETE-CONFIG-PROBE"
+        },
+        "sub-fonts-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "demuxer-max-bytes": {
+          "status": "ok",
+          "transport": "mpv-text",
+          "legacyValue": -1073741824,
+          "value": 3221225472
+        }
+      }
+    }
+  ],
+  "installer": {
+    "target": "E:/Emby Theater Enhanced Test",
+    "steps": [
+      {
+        "version": "0.1.0",
+        "exitCode": 0,
+        "payloadFiles": 1012,
+        "registry": true,
+        "desktopShortcut": true,
+        "startMenuShortcut": true
+      },
+      {
+        "version": "0.1.1",
+        "exitCode": 0,
+        "payloadFiles": 1012,
+        "registry": true,
+        "desktopShortcut": true,
+        "startMenuShortcut": true
+      }
+    ],
+    "uninstall": {
+      "exitCode": 0,
+      "registryRemoved": true,
+      "desktopRemoved": true,
+      "menuRemoved": true,
+      "targetRemoved": true,
+      "profilePreserved": true
+    },
+    "launch": {
+      "launcherExitCode": 0,
+      "hostCount": 1,
+      "electronCount": 4,
+      "diagnosticLog": true
+    }
+  },
+  "artifact": {
+    "sha256": "84bfd2970d6d31277fe43fffdd9f1b20f608458d070986a62d318181d3bd5701",
+    "payloadFiles": 1012,
+    "path": "dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe",
+    "hashMismatches": 0,
+    "bytes": 123972095
+  },
+  "reproducibility": {
+    "files": 1013,
+    "differences": 0
+  },
+  "pending": [
+    "Real Emby media and Session/WebSocket",
+    "WatchTogether",
+    "User sample selection"
+  ],
+  "git": {
+    "initialized": false,
+    "commits": []
+  }
+}

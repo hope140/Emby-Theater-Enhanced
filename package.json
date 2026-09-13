@@ -1,0 +1,12 @@
+{
+  "name": "emby-theater-enhanced-tooling",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Local build tooling; does not replace the frozen Electron runtime",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "node-unrar-js": "2.0.2"
+  }
+}

@@ -1,0 +1,48 @@
+/.work/
+/dist/
+/build/
+/node_modules/
+/vendor/carnival/
+/vendor/patch/
+/vendor/official-reference/
+/src/electronapp/www/
+/src/electronapp/preload.js
+/src/electronapp/scripts/windowsync.js
+/src/electronapp/package.json
+/src/electronapp/plugins/mpvplayer/strings/en-US.json
+/src/electronapp/plugins/mpvplayer/strings/zh-CN.json
+/docs/evidence/live-acceptance.json
+
+# Original inputs, generated payloads, and native/runtime binaries are not
+# part of the first public-source baseline.
+/*.exe
+/*.zip
+/*.dll
+/*.node
+/*.pdb
+/*.msi
+/*.msix
+/*.msixbundle
+/*.nupkg
+
+# Test output, logs, caches, and local profiles.
+/test-output/
+/test-results/
+/coverage/
+/.cache/
+/.tmp/
+*.log
+*.tmp
+*.bak
+*.user
+*.suo
+.env
+.env.*
+!.env.example
+
+# Local IDE and operating-system state.
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

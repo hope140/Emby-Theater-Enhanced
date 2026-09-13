@@ -1,0 +1,19 @@
+{
+  "inno": {
+    "version": "6.7.3",
+    "source": "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe",
+    "sha256": "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732",
+    "authenticode": "Valid; Pyrsys B.V.",
+    "mode": "Extracted locally, not installed"
+  },
+  "unpacker": {
+    "source": "https://raw.githubusercontent.com/jrathlev/InnoUnpacker-Windows-GUI/master/innounp-2/bin/innounp-267.zip",
+    "sha256": "ac1d98bba6588072ade06163781938df274f444bec7318069668608d1e5faae8",
+    "mode": "Project-local build tool"
+  },
+  "npm": {
+    "package": "node-unrar-js",
+    "version": "2.0.2",
+    "lockfile": "package-lock.json"
+  }
+}

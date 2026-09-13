@@ -1,0 +1,444 @@
+{
+  "date": "2026-09-12",
+  "timezone": "UTC+8",
+  "version": "0.1.0",
+  "unitTests": {
+    "passed": 4,
+    "failed": 0
+  },
+  "runtime": {
+    "ok": true,
+    "versions": {
+      "node": "16.13.2",
+      "v8": "10.0.139.18-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.15",
+      "chrome": "100.0.4896.160"
+    },
+    "state": {
+      "title": "Emby",
+      "ready": true,
+      "textLength": 64,
+      "players": [
+        {
+          "id": "photoplayer",
+          "name": "Photo Player"
+        },
+        {
+          "id": "youtubeplayer",
+          "name": "Youtube Player"
+        },
+        {
+          "id": "libmpvmediaplayer",
+          "name": "libmpv"
+        },
+        {
+          "id": "remoteplayer",
+          "name": "Remote Control"
+        },
+        {
+          "id": "htmlaudioplayer",
+          "name": "Audio Player"
+        },
+        {
+          "id": "htmlvideoplayer",
+          "name": "Video Player"
+        }
+      ],
+      "screenshotAvailable": true,
+      "playback": {
+        "advanced": true,
+        "paused": true,
+        "sought": true,
+        "resumed": true,
+        "stopped": true
+      }
+    }
+  },
+  "windowsHost": {
+    "hostAlive": true,
+    "electronProcesses": 4,
+    "diagnosticLog": true
+  },
+  "diagnostics": [
+    {
+      "timestamp": "2026-09-12T13:44:53.456Z",
+      "stage": "runtime",
+      "versions": {
+        "electron": "18.3.15",
+        "chromium": "100.0.4896.160",
+        "node": "16.13.2"
+      },
+      "mpvConfig": {
+        "exists": true,
+        "sha256": "974481e25cb49c2dce50a3214a95cca9495a745d0a8116350fa49e5ecb8d7129"
+      }
+    },
+    {
+      "timestamp": "2026-09-12T13:45:00.992Z",
+      "stage": "ready",
+      "properties": {
+        "mpv-version": {
+          "status": "ok",
+          "value": "mpv v0.41.0-920-gdd5d17d32"
+        },
+        "libmpv-version": {
+          "status": "unavailable"
+        },
+        "mpv-build-date": {
+          "status": "unavailable"
+        },
+        "current-vo": {
+          "status": "unavailable"
+        },
+        "vo": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "gpu-next",
+              "params": {}
+            }
+          ]
+        },
+        "gpu-api": {
+          "status": "ok",
+          "value": []
+        },
+        "gpu-context": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "d3d11",
+              "params": {}
+            }
+          ]
+        },
+        "hwdec": {
+          "status": "ok",
+          "value": [
+            "amf-copy"
+          ]
+        },
+        "hwdec-current": {
+          "status": "unavailable"
+        },
+        "scale": {
+          "status": "ok",
+          "value": "lanczos"
+        },
+        "cscale": {
+          "status": "ok",
+          "value": 0
+        },
+        "dscale": {
+          "status": "ok",
+          "value": "hermite"
+        },
+        "tscale": {
+          "status": "ok",
+          "value": "oversample"
+        },
+        "deband": {
+          "status": "ok",
+          "value": false
+        },
+        "interpolation": {
+          "status": "ok",
+          "value": false
+        },
+        "video-sync": {
+          "status": "ok",
+          "value": "audio"
+        },
+        "target-colorspace-hint": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-trc": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-prim": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-peak": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "tone-mapping": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "gamut-mapping-mode": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "glsl-shaders": {
+          "status": "ok",
+          "configured": true,
+          "count": 1
+        },
+        "video-params": {
+          "status": "unavailable"
+        },
+        "video-out-params": {
+          "status": "unavailable"
+        },
+        "config": {
+          "status": "ok",
+          "value": true
+        },
+        "config-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "sub-font": {
+          "status": "ok",
+          "value": "思源宋体 Bold"
+        },
+        "sub-fonts-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "demuxer-max-bytes": {
+          "status": "ok",
+          "value": -1073741824
+        }
+      }
+    },
+    {
+      "timestamp": "2026-09-12T13:45:01.124Z",
+      "stage": "playing",
+      "properties": {
+        "mpv-version": {
+          "status": "ok",
+          "value": "mpv v0.41.0-920-gdd5d17d32"
+        },
+        "libmpv-version": {
+          "status": "unavailable"
+        },
+        "mpv-build-date": {
+          "status": "unavailable"
+        },
+        "current-vo": {
+          "status": "ok",
+          "value": "gpu-next"
+        },
+        "vo": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "gpu-next",
+              "params": {}
+            }
+          ]
+        },
+        "gpu-api": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "d3d11",
+              "params": {}
+            }
+          ]
+        },
+        "gpu-context": {
+          "status": "ok",
+          "value": [
+            {
+              "enabled": true,
+              "name": "d3d11",
+              "params": {}
+            }
+          ]
+        },
+        "hwdec": {
+          "status": "ok",
+          "value": [
+            "d3d11va"
+          ]
+        },
+        "hwdec-current": {
+          "status": "ok",
+          "value": "no"
+        },
+        "scale": {
+          "status": "ok",
+          "value": "lanczos"
+        },
+        "cscale": {
+          "status": "ok",
+          "value": 0
+        },
+        "dscale": {
+          "status": "ok",
+          "value": "hermite"
+        },
+        "tscale": {
+          "status": "ok",
+          "value": "oversample"
+        },
+        "deband": {
+          "status": "ok",
+          "value": false
+        },
+        "interpolation": {
+          "status": "ok",
+          "value": false
+        },
+        "video-sync": {
+          "status": "ok",
+          "value": "audio"
+        },
+        "target-colorspace-hint": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-trc": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-prim": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "target-peak": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "tone-mapping": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "gamut-mapping-mode": {
+          "status": "ok",
+          "value": "auto"
+        },
+        "glsl-shaders": {
+          "status": "ok",
+          "configured": true,
+          "count": 2
+        },
+        "video-params": {
+          "status": "ok",
+          "value": {
+            "alpha": "none",
+            "aspect": 1,
+            "aspect-name": "Square",
+            "average-bpp": 12,
+            "chroma-location": "mpeg1/jpeg",
+            "colorlevels": "limited",
+            "colormatrix": "bt.601",
+            "crop-h": 64,
+            "crop-w": 64,
+            "crop-x": 0,
+            "crop-y": 0,
+            "dh": 64,
+            "dw": 64,
+            "gamma": "bt.1886",
+            "h": 64,
+            "light": "display",
+            "par": 1,
+            "pixelformat": "yuv420p",
+            "primaries": "bt.709",
+            "rotate": 0,
+            "sar": 1,
+            "sar-name": "Square",
+            "sig-peak": 0,
+            "stereo-in": "mono",
+            "w": 64
+          }
+        },
+        "video-out-params": {
+          "status": "ok",
+          "value": {
+            "alpha": "none",
+            "aspect": 1,
+            "aspect-name": "Square",
+            "average-bpp": 12,
+            "chroma-location": "mpeg1/jpeg",
+            "colorlevels": "limited",
+            "colormatrix": "bt.601",
+            "crop-h": 64,
+            "crop-w": 64,
+            "crop-x": 0,
+            "crop-y": 0,
+            "dh": 64,
+            "dw": 64,
+            "gamma": "bt.1886",
+            "h": 64,
+            "light": "display",
+            "par": 1,
+            "pixelformat": "yuv420p",
+            "primaries": "bt.709",
+            "rotate": 0,
+            "sar": 1,
+            "sar-name": "Square",
+            "sig-peak": 0,
+            "stereo-in": "mono",
+            "w": 64
+          }
+        },
+        "config": {
+          "status": "ok",
+          "value": true
+        },
+        "config-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "sub-font": {
+          "status": "ok",
+          "value": "思源宋体 Bold"
+        },
+        "sub-fonts-dir": {
+          "status": "ok",
+          "configured": false
+        },
+        "demuxer-max-bytes": {
+          "status": "ok",
+          "value": -1073741824
+        }
+      }
+    }
+  ],
+  "reproducibility": {
+    "hashDifferences": 0,
+    "runtimeFiles": 1013
+  },
+  "installer": {
+    "compiled": true,
+    "file": "EmbyTheaterEnhanced-0.1.0-win-x64-setup.exe",
+    "extractedPayloadFiles": 1012,
+    "installed": false,
+    "payloadHashDifferences": 0,
+    "sha256": "f120c2b0f4ba46e8153bcb451e9cb0a06fee1a2987753c303965c0177a2dfb66",
+    "bytes": 123990793
+  },
+  "realEmby": {
+    "nativeVideo": "unverified",
+    "remoteControl": "unverified",
+    "nativeStrm": "unverified",
+    "watchTogether": "unverified",
+    "session": "unverified"
+  },
+  "git": {
+    "initialized": false,
+    "commits": []
+  }
+}
