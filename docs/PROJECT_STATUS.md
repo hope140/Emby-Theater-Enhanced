@@ -6,7 +6,7 @@
 
 - Baseline：用户提供的 Carnival 3.0（应用 3.0.20-3.0）+ 综合补丁最终 ZIP。
 - Enhanced：0.1.1 开发候选；Windows host 文件版本保持 3.0.20.0，Electron 应用构建版本为 0.1.1。
-- Git：本地 Git baseline 完成（`main` / `v0.1.1-baseline`）；主线程公开审核进行中；remote/push 在审核后执行。首个提交仅纳入已审计的维护文件，未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
+- Git：本地 Git baseline 完成（`main` / `v0.1.1-baseline`）；首次公开审核清理已完成，已同步到 GitHub `origin/main` 与同名标签；未创建 Release。首个提交仅纳入已审计的维护文件，未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
 - 源码：`src/electronapp`；原件在根目录，解包输入在 `vendor/carnival` 与 `vendor/patch`。
 - 交付：`dist/EmbyTheaterEnhanced-0.1.1-final-win-x64/Start-Enhanced.cmd`；`dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe`。旧 0.1.0 产物保留。
 - 工具：`tools/prepare.ps1`、`build.ps1`、`package.ps1`、`test-runtime.ps1`、`test-host.ps1`。
@@ -15,7 +15,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 工程目录和知识库 | 完成；本地 Git baseline 已建立，公开审核进行中 |
+| 工程目录和知识库 | 完成；公开 Git baseline 已推送，等待下一阶段任务规格 |
 | Carnival 分类与 vendor 清单 | 完成；E 类 815 文件精确上游来源未确认 |
 | 可重复 runtime 构建 | 通过，重复输出 1013 文件 SHA256 一致 |
 | 原 Windows host 启动 | 测试副本通过；host+4 Electron 进程、诊断日志 |
@@ -46,7 +46,7 @@ Electron **18.3.15**；Chromium **100.0.4896.160**；Node **16.13.2**；mpv **v0
 
 用户已登录非管理员账号，明确允许选择任意影视测试，并确认全库为 STRM、WatchTogether 以后台控制正常为准。两个不同 STRM 样本的真实 DirectStream 播放、进度、Pause/Seek/Unpause/NextTrack/Stop 全部通过。每个样本的 Item/MediaSource/PlaySession 关联一致，停止报告均被服务器接受；画面已实际检查。测试会留下样本正常观看进度，未额外重置用户数据。
 
-本轮没有运行时产品代码变更，0.1.1 产物保持原哈希。验收脚本初次误用包名导致 HTTP/WS Session 身份分裂，已改为真实 productName 并重新通过；此问题不归为产品缺陷。公开 baseline push 后进入 Mount；许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
+本轮没有运行时产品代码变更，0.1.1 产物保持原哈希。验收脚本初次误用包名导致 HTTP/WS Session 身份分裂，已改为真实 productName 并重新通过；此问题不归为产品缺陷。公开 baseline 已推送；下一阶段在用户提供 Mount 任务规格后开始。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
 
 ## 推荐继续入口
 
