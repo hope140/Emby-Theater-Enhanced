@@ -20,3 +20,11 @@
 18. 文件扩展名是播放安全边界的一部分；第一版应维护明确的音视频 allowlist，接受少量漏命中，避免把 `.txt`、`.nfo`、图片等文件交给播放器。
 19. 真实 smoke 应把 sourcePath 形态、实际 PlayMethod 和最终 source 类型分开记录；当前服务器没有自然 Mount 映射时，必须明确记录 real Emby Mount hit pending，并把 native fallback 作为独立通过项。
 20. 真实验收只需在隔离输出中保留脱敏的状态枚举和报告计数；服务器地址、账号、认证材料、媒体路径与 Item 标识不应进入仓库或公开 evidence。
+21. ETLP beta 的 CloudDrive2 控制/文件查询使用 gRPC，HTTP 主要承载 CD2 下载 URL 和 ETLP 本地 gateway；不能把 HTTP 管理端口误认为已存在 REST 文件解析 API。
+22. CloudDrive2 proto source version 与运行时 API version 可能错位；本机 proto 1.0.13 与 runtime 1.0.15 的基础只读 RPC 兼容，但实现前仍需固定版本和字段兼容策略。
+23. ETLP 的 Windows 本地路径进入 CD2 查询前必须经过明确 `path_map`；配置存在不代表命中，local prefix 与实际挂载路径的 mapping hit 需要单独实测。
+24. 本机 CD2 样本返回的同源 HTTP URL 自带 query 鉴权并支持 byte Range，但这不能推导所有 provider 都不需要 `User-Agent`、Cookie、Referer 或其他动态 headers。
+25. 115 开启 Support Direct Link 后，真实 `get_direct_url=true` 响应会返回外部 HTTPS `directUrl`、专用 `userAgent` 和分钟级 `expiresIn`；裸 Range 为 403，携带该 User-Agent 才稳定为 206，因此不能把“有 directUrl”直接等同于可安全播放。
+26. 当前 Pepper bridge 的 command 路径会把每个参数转为字符串后调用 `mpv_command`，不能传 `MPV_FORMAT_NODE_MAP`。mpv 0.41 的 `loadfile ... -1 <options>` 可以承载 file-local 选项并在文件结束后恢复，但任意 header 的字符串编码和 bridge 实机行为必须单独验收，不能改全局 User-Agent 后立即清理。
+27. 同步 Mount Resolver 改成异步 CD2 lookup 后，deadline 只能限制资源占用，不能阻止 late response 覆盖新播放。PlaybackManager 请求、libmpv `loadfile`、NextTrack 与 Stop 必须共享 generation/request id，并在每个 await 后和最终 `loadfile` 前复核。
+28. `@grpc/grpc-js` 可在当前 Electron 18.3.15 内置 Node 16.13.2 中以纯 JavaScript 完成带 Bearer metadata 和 deadline 的真实只读 RPC；`grpc-web` 使用不同 wire protocol，直连原生 CD2 gRPC 仍需要代理，不适合作为本项目 V1 transport。

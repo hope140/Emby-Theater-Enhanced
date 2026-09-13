@@ -1,5 +1,35 @@
 # 开发日志
 
+## 2026-09-13 — CloudDrive2 Resolver Sol High 架构评审
+
+在 `main == origin/main == 7670d42`、工作区仅有既有调研文档改动的基线上完成 Tier 2 / Sol High 评审。本轮没有修改 `src/`、`package.json`、CD2 配置/mount/cache、Emby/服务器配置或网盘数据，没有执行 refresh、真实 Enhanced 播放、分支、commit、PR、发布或安装。
+
+复用一个现有 115 媒体样本，对同一文件分别执行 `GetDownloadUrlPath(get_direct_url=false/true)`。`false` 返回同源 `downloadUrlPath`，HEAD=200、单字节 Range=206，无重定向和额外 header。`true` 额外返回 provider/external HTTPS DirectUrl、专用 User-Agent 和分钟级 expiresIn，additionalHeaders 为空；裸 URL 的 HEAD/Range 均为 403，携带返回 User-Agent 后 HEAD 仍为 403、Range 为 206，交叉顺序复测两次一致。所有 token、完整 URL/query、媒体名、账号和私人路径只在内存中使用且未输出或落盘。
+
+Transport 结论：固定 `@grpc/grpc-js@1.14.4` + `@grpc/proto-loader@0.8.1`，放在 Electron main process，通过窄 IPC 服务 renderer。临时隔离 smoke 使用随包 Electron 18.3.15 / Node 16.13.2、repo proto 1.0.13 调用 runtime 1.0.15，Bearer metadata、unary RPC、deadline 和 insecure localhost HTTP/2 成功，无 native addon。`grpc-web` 因 wire protocol 不同且需要代理而不采用。临时依赖只位于 ignored `.work`，完成后清理。
+
+架构结论：115 DirectUrl 分类为 Level B，但因专用 User-Agent、分钟级有效期及当前 Pepper bridge 只能把 command 参数转成字符串，DirectUrl 不进入 V1。PR #2 建议实现 `CD2 same-origin HTTP → Mount → Native`；Transcode 永远 Native。异步接入必须在 PlaybackManager 与 libmpv 之间共享单调 generation/request id，Stop/NextTrack/新播放立即取消旧请求，并在每个 await 后和最终 `loadfile` 前拒绝 stale response。建议总 lookup budget 750ms，不 retry、不 refresh、不持久或跨播放缓存 URL。
+
+Model Tier: 2
+Model: GPT-5.6 Sol
+Reason: gRPC packaging, proto/runtime drift, provider HTTP headers/expiry, PlaybackManager/libmpv asynchronous lifecycle and native fallback span multiple layers
+Escalated: yes, from the prior Tier 1 research
+
+## 2026-09-13 — CloudDrive2 Resolver 调研完成
+
+按当前主线任务书优先审计 `hope140/embyToLocalPlayer` 的 `beta` 分支，研究快照为 `54b2abae0537f1b4c65752edaac059d3cda4790e`。本轮只做设计和只读验证，没有修改 Enhanced 产品源码，没有执行 CD2 refresh，没有进行 Enhanced + CD2 实际播放集成，也没有修改本机 CD2 配置、挂载、账号或媒体数据。
+
+新增 `docs/CD2_RESEARCH.md`，记录 ETLP 的完整 STRM → local path → path_map → gRPC → HTTP download URL → 外置播放器调用链，以及路径推导、mapping、refresh、headers/Range/auth、fallback、禁止迁移逻辑、Enhanced V1/V2 边界和 fake/real 测试方案。
+
+本机只读结果：CloudDrive2 service 为 Running/Automatic，运行时 RPC 版本为 1.0.15；19798 的 HTTP 与 gRPC 可用，配置中的 19799 在探测时未监听；存在一个已挂载的 Windows drive-letter mount。使用运行 ETLP 配置的现有 token 仅在内存中查询一个媒体样本，`FindFileByPath`、`GetDownloadUrlPath` 成功，返回同源 HTTP URL；HEAD=200，单字节 Range=206，支持 `Accept-Ranges: bytes`，本次没有额外 HTTP headers 和重定向。当前 ETLP 一条 path_map 对该样本没有命中，因此 mapping 是后续实机命中的前置条件。敏感 token、URL、路径、账号和媒体名未写入文档。
+
+ETLP beta 的 CD2 client/gateway 测试使用 fake/stub，`test_strm_media_path`、`test_clouddrive2_client`、`test_clouddrive2_gateway` 通过。当前结论为 **Need Sol High review**，原因是 Python cp39-win32 `grpcio` 与 Enhanced Node/Electron 不兼容，以及 proto/runtime 漂移、Range/临时 URL、可选动态 headers、refresh stream 和 PlaybackManager source-only 接入存在跨层风险。调研完成后按任务要求停止，等待主线程审核。
+
+Model Tier: 1
+Model: GPT-5（当前 Codex 会话）
+Reason: research contract and evidence boundary were explicit; implementation was intentionally out of scope
+Escalated: no
+
 ## 2026-09-13 — PR #1 边界修正与真实 native smoke
 
 根据主线程复核修正当前 PR 的两个边界：Mount 规则改为按优先级逐条生成并立即执行 `existsSync`，高优先级 sidecar 命中不会被后续 sourcePath 解析失败推翻；候选扩展改为明确音视频 allowlist，`.txt`、`.nfo` 等文件即使存在也不作为 Mount source。
