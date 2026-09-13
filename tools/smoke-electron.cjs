@@ -5,15 +5,17 @@ const fs = require('fs');
 const path = require('path');
 const runtime = process.env.ETE_TEST_RUNTIME;
 const evidence = process.env.ETE_TEST_EVIDENCE;
+const testCd2Origin = process.env.ETE_CD2_ORIGIN || '';
 if (!runtime || !evidence) throw Error('ETE_TEST_RUNTIME and ETE_TEST_EVIDENCE are required');
 app.setName('emby-theater-enhanced-smoke');
 let fixtureUrl;
 const mediaRequests = [];
+let fakeCd2Stats;
 if (process.env.ETE_TEST_PIPELINE) {
     const media = fs.readFileSync(process.env.ETE_TEST_MEDIA);
     const server = require('http').createServer((request,response) => {
         mediaRequests.push({method:request.method,range:request.headers.range || null});
-        if (request.url !== '/fixture.y4m') { response.writeHead(404); return response.end(); }
+        if (new URL(request.url, 'http://127.0.0.1').pathname !== '/fixture.y4m') { response.writeHead(404); return response.end(); }
         const match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || '');
         const start = match ? Number(match[1]) : 0;
         const end = match && match[2] ? Math.min(Number(match[2]),media.length-1) : media.length-1;
@@ -33,13 +35,42 @@ let testWindow;
 function finish(result) {
     if (completed) return;
     completed = true;
+    result.cd2EnvironmentCleared = ['ETE_CD2_ENABLED','ETE_CD2_ORIGIN','ETE_CD2_TOKEN','ETE_CD2_LOCAL_PREFIX','ETE_CD2_CLOUD_PREFIX']
+        .every(name => process.env[name] === undefined);
+    if (!result.cd2EnvironmentCleared) result.ok = false;
+    result.mediaRequestSummary = {
+        count: mediaRequests.length,
+        rangeCount: mediaRequests.filter(request => request.range).length
+    };
+    if (fakeCd2Stats) {
+        result.cd2Fake = {
+            resolveCount: fakeCd2Stats.resolveCount,
+            cancelCount: fakeCd2Stats.cancelCount,
+            completedCount: fakeCd2Stats.completedCount,
+            activeCount: fakeCd2Stats.active.size
+        };
+    }
     fs.writeFileSync(path.join(evidence, 'electron-smoke.json'), JSON.stringify(result, null, 2));
     app.exit(result.ok ? 0 : 1);
 }
 setTimeout(async () => {
     const trace = testWindow ? await testWindow.webContents.executeJavaScript('window.__pipelineTrace || []').catch(()=>[]) : [];
-    finish({ok:false, error:'UI smoke timeout', trace, mediaRequests});
-}, 25000);
+    let sourceState = null;
+    if (testWindow) {
+        const expectedOrigin = testCd2Origin;
+        const expectedOriginLiteral = JSON.stringify(expectedOrigin);
+        sourceState = await testWindow.webContents.executeJavaScript(`new Promise(function(resolve) {
+            require(['pluginManager'], function(pm) {
+                var player = pm.ofType('mediaplayer').find(function(p) { return p.id === 'libmpvmediaplayer'; });
+                var source = player && player.currentSrc && player.currentSrc();
+                var kind = typeof source === 'string' && /^https?:/i.test(source) ? 'http' : typeof source === 'string' ? 'local' : 'absent';
+                try { if (${expectedOriginLiteral} && new URL(source).origin === new URL(${expectedOriginLiteral}).origin) kind = 'cd2'; } catch (_) {}
+                resolve({kind:kind, present:typeof source === 'string' && source.length > 0});
+            });
+        })`).catch(()=>null);
+    }
+    finish({ok:false, error:'UI smoke timeout', trace, sourceState, mediaRequests});
+}, process.env.ETE_TEST_CD2_EXPECT === 'real' ? 45000 : 25000);
 app.on('browser-window-created', (_, win) => {
     testWindow = win;
     if (!process.env.ETE_TEST_VISIBLE) win.on('show', () => win.hide());
@@ -59,8 +90,10 @@ app.on('browser-window-created', (_, win) => {
                 if (!screenshot.isEmpty()) fs.writeFileSync(path.join(evidence, 'startup.png'), screenshot.toPNG());
                 if (process.env.ETE_TEST_PIPELINE) {
                     const source = fs.readFileSync(path.join(__dirname,'../tests/pipeline-browser.js'),'utf8');
-                    state.pipeline = await win.webContents.executeJavaScript(source + '\nrunPipelineFixture(' + JSON.stringify(fixtureUrl) + ', ' + JSON.stringify(process.env.ETE_TEST_MOUNT_SIDECAR || null) + ')');
-                    if (!Object.values(state.pipeline.next).every(Boolean) || !state.pipeline.results.every(result => result.playerId==='libmpvmediaplayer' && Object.entries(result).filter(([k])=>!['kind','playerId'].includes(k)).every(([,v])=>v===true))) {
+                    state.pipeline = await win.webContents.executeJavaScript(source + '\nrunPipelineFixture(' + JSON.stringify(fixtureUrl) + ', ' + JSON.stringify(process.env.ETE_TEST_MOUNT_SIDECAR || null) + ', ' + JSON.stringify(process.env.ETE_TEST_CD2_EXPECT || process.env.ETE_TEST_CD2_MODE || null) + ', ' + JSON.stringify(process.env.ETE_CD2_ORIGIN || null) + ')');
+                    if (!Object.values(state.pipeline.next).every(Boolean) || !state.pipeline.results.every(result => result.playerId==='libmpvmediaplayer' && Object.entries(result).filter(([k])=>!['kind','playerId'].includes(k)).every(([,v])=>v===true)) ||
+                        (state.pipeline.generation && !Object.values(state.pipeline.generation).every(Boolean)) ||
+                        (process.env.ETE_TEST_CD2_MODE === 'hit' && fakeCd2Stats.cancelCount < 2)) {
                         return finish({ok:false,error:'Playback pipeline assertion failed',state});
                     }
                 } else if (process.env.ETE_TEST_MEDIA) {
@@ -130,4 +163,40 @@ app.on('browser-window-created', (_, win) => {
         }, 6500);
     });
 });
+
+if (process.env.ETE_TEST_CD2_MODE) {
+    fakeCd2Stats = {resolveCount: 0, cancelCount: 0, completedCount: 0, active: new Map()};
+    const serviceModule = require(path.join(runtime, 'electronapp/enhanced/cd2-service.js'));
+    serviceModule.createService = function () {
+        return {
+            resolve(request) {
+                fakeCd2Stats.resolveCount++;
+                return new Promise(resolve => {
+                    const timer = setTimeout(() => {
+                        fakeCd2Stats.active.delete(request.requestId);
+                        fakeCd2Stats.completedCount++;
+                        if (process.env.ETE_TEST_CD2_MODE === 'hit') {
+                            resolve({status:'hit',type:'url',source:fixtureUrl+'?cd2='+encodeURIComponent(request.requestId)});
+                        } else {
+                            resolve({status:'miss',reason:'unavailable'});
+                        }
+                    }, 400);
+                    fakeCd2Stats.active.set(request.requestId, {timer, resolve});
+                });
+            },
+            cancel(requestId) {
+                const entry = fakeCd2Stats.active.get(requestId);
+                if (!entry) return false;
+                fakeCd2Stats.cancelCount++;
+                clearTimeout(entry.timer);
+                fakeCd2Stats.active.delete(requestId);
+                entry.resolve({status:'cancelled',reason:'cancelled'});
+                return true;
+            },
+            close() {
+                for (const requestId of Array.from(fakeCd2Stats.active.keys())) this.cancel(requestId);
+            }
+        };
+    };
+}
 require(path.join(runtime, 'electronapp/main.js'));
