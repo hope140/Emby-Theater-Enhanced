@@ -11,7 +11,33 @@
 }(this, function (defaultFileSystem) {
     'use strict';
 
-    var mediaExtension = /^\.[A-Za-z0-9]{1,10}$/;
+    var mediaExtensions = {
+        mkv: true,
+        mp4: true,
+        m4v: true,
+        avi: true,
+        mov: true,
+        ts: true,
+        m2ts: true,
+        mts: true,
+        webm: true,
+        mpg: true,
+        mpeg: true,
+        vob: true,
+        wmv: true,
+        flv: true,
+        y4m: true,
+        mp3: true,
+        flac: true,
+        m4a: true,
+        aac: true,
+        ogg: true,
+        opus: true,
+        wav: true,
+        wma: true,
+        ape: true,
+        alac: true
+    };
 
     function isWindowsLocalPath(value) {
         return typeof value === 'string' && (
@@ -41,8 +67,8 @@
             return false;
         }
 
-        extension = name.substring(extensionStart);
-        return mediaExtension.test(extension) && extension.toLowerCase() !== '.strm';
+        extension = name.substring(extensionStart + 1).toLowerCase();
+        return !!mediaExtensions[extension];
     }
 
     function deriveSidecarStem(sidecarPath) {
@@ -209,20 +235,32 @@
         var parsedUrl;
         var urlFileName;
         var queryFileName;
-        var candidate;
-        var i;
+        var result;
 
-        function addCandidate(value) {
+        function checkCandidate(value) {
             if (typeof value === 'string' && value && candidates.indexOf(value) < 0) {
                 candidates.push(value);
+                if (exists(fileSystem, value)) {
+                    return makeResult('local', value, 'mount_hit', true);
+                }
             }
+
+            return null;
         }
 
         sidecarStem = deriveSidecarStem(sidecarPath);
-        addCandidate(sidecarStem);
+        result = checkCandidate(sidecarStem);
+        if (result) {
+            return result;
+        }
 
         if (isWindowsLocalPath(sourcePath)) {
-            addCandidate(sourcePath);
+            if (hasMediaExtension(sourcePath)) {
+                result = checkCandidate(sourcePath);
+                if (result) {
+                    return result;
+                }
+            }
         } else if (typeof sourcePath === 'string' && sourcePath) {
             parsedUrl = parseSourceUrl(sourcePath, dependencies);
             if (parsedUrl.failed) {
@@ -234,7 +272,10 @@
                 return makeResult('native', nativeSource, 'parse_failed', false);
             }
             if (urlFileName.value) {
-                addCandidate(joinSibling(sidecarPath, urlFileName.value));
+                result = checkCandidate(joinSibling(sidecarPath, urlFileName.value));
+                if (result) {
+                    return result;
+                }
             }
 
             queryFileName = getQueryFileName(parsedUrl.value);
@@ -242,14 +283,10 @@
                 return makeResult('native', nativeSource, 'parse_failed', false);
             }
             if (queryFileName.value) {
-                addCandidate(joinSibling(sidecarPath, queryFileName.value));
-            }
-        }
-
-        for (i = 0; i < candidates.length; i++) {
-            candidate = candidates[i];
-            if (exists(fileSystem, candidate)) {
-                return makeResult('local', candidate, 'mount_hit', true);
+                result = checkCandidate(joinSibling(sidecarPath, queryFileName.value));
+                if (result) {
+                    return result;
+                }
             }
         }
 

@@ -49,6 +49,8 @@ Resolver 使用三个严格分离的路径字段。
 3. 从 HTTP(S) `sourcePath` 的 URL pathname 提取明确文件名，并在 `sidecarPath` 所在目录尝试。
 4. 从 URL 的 `name`、`filename` 或 `file_name` query 参数提取明确文件名，并在 sidecar 所在目录尝试。
 
+可作为 Mount candidate 的扩展为：`mkv`、`mp4`、`m4v`、`avi`、`mov`、`ts`、`m2ts`、`mts`、`webm`、`mpg`、`mpeg`、`vob`、`wmv`、`flv`、`y4m`、`mp3`、`flac`、`m4a`、`aac`、`ogg`、`opus`、`wav`、`wma`、`ape`、`alac`。其他扩展即使文件存在也不命中。
+
 URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、URL 解析或文件系统检查异常均转为 native fallback。
 
 第一版不进行模糊搜索、递归扫描、全盘搜索、父目录猜测、历史缓存、数据库或配置映射。
@@ -65,6 +67,6 @@ URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、
 
 ## Known limitations
 
-当前已通过 Node 单元测试和隔离 frozen Electron 的 PlaybackManager/libmpv 夹具。夹具覆盖普通媒体、无 Mount 的 STRM fallback、Mount 文件命中以及 Session/control 状态保持；真实 Emby 服务器上的 Mount 命中、不同媒体编码、字幕/音轨差异和长时间稳定性仍需实机验收。CD2 不在本阶段范围内。
+当前已通过 Node 单元测试和隔离 frozen Electron 的 PlaybackManager/libmpv 夹具。夹具覆盖普通媒体、无 Mount 的 STRM fallback、Mount 文件命中以及 Session/control 状态保持。真实 Emby smoke 已完成 native fallback 和控制链回归，但当前服务器路径条件没有自然 Mount 命中，real Emby Mount hit pending；不同媒体编码、字幕/音轨差异和长时间稳定性仍需实机验收。CD2 不在本阶段范围内。
 
 未来解析优先级为 `CD2 → Mount → native`。CD2 应在不改变本契约和 PlaybackManager 生命周期的前提下作为更高优先级 source resolver 接入。

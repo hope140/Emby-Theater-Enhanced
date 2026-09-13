@@ -66,6 +66,27 @@ test('sidecar stem rule resolves an existing local media file', () => {
     }
 });
 
+test('a higher-priority sidecar hit is returned before unsupported or malformed source parsing', () => {
+    for (const sourcePath of [
+        'not-a-supported-source',
+        'https://media.example.test/%E0%A4%A.mkv'
+    ]) {
+        const fixture = createFixture('Movie.mkv.strm', sourcePath);
+        const expected = path.join(fixture.directory, 'Movie.mkv');
+        fs.writeFileSync(expected, 'fixture');
+
+        try {
+            const result = resolveFor(fixture);
+
+            assert.equal(result.type, 'local');
+            assert.equal(result.source, expected);
+            assert.equal(result.reason, 'mount_hit');
+        } finally {
+            fixture.cleanup();
+        }
+    }
+});
+
 test('local MediaSource.Path and URL pathname/query rules resolve only existing files', () => {
     const localFixture = createFixture('Mounted.strm', 'D:\\Mounts\\Mounted.mkv');
     const localPath = 'D:\\Mounts\\Mounted.mkv';
@@ -134,6 +155,23 @@ test('missing local files fall back to the native source', () => {
         assert.equal(result.fallback, true);
     } finally {
         fixture.cleanup();
+    }
+});
+
+test('non-media sidecar extensions are not mount candidates', () => {
+    for (const extension of ['txt', 'nfo']) {
+        const fixture = createFixture(`Movie.${extension}.strm`);
+        fs.writeFileSync(path.join(fixture.directory, `Movie.${extension}`), 'fixture');
+
+        try {
+            const result = resolveFor(fixture);
+
+            assert.equal(result.type, 'native');
+            assert.equal(result.source, fixture.nativeSource);
+            assert.equal(result.reason, 'mount_missing');
+        } finally {
+            fixture.cleanup();
+        }
     }
 });
 

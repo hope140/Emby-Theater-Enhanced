@@ -25,7 +25,7 @@
 | 原生普通媒体 / STRM | 真实 STRM 两集通过，走原生 DirectStream；普通文件仅本地/模拟验证，库内无样本 |
 | Session / Remote Control | 非管理员账号下，真实服务器接受命令、WebSocket 送达、播放器响应及服务端状态回读全部通过 |
 | WatchTogether | 按用户确认的后台控制正常口径通过；未宣称插件双客户端同步精度已测试 |
-| STRM Mount Resolver | 已实现 Detection、Mount → Native contract、确定性路径规则、Transcode protection 和安全诊断；Node 17/17、隔离 runtime 命中通过 |
+| STRM Mount Resolver | 已实现 Detection、Mount → Native contract、确定性优先级、媒体扩展 allowlist、Transcode protection 和安全诊断；Node 19/19、隔离 runtime 命中通过；真实 native fallback 通过，real Emby Mount hit pending |
 | External Player | 已禁用入口并测试；保留旧实现 |
 | 环境诊断 | 实际 Electron/Chrome/Node、DLL API/version、ready/playing 已取得 |
 | mpv.conf / GPU / HDR | 配置规则/隔离通过；真实样本 gpu-next、d3d11va 硬解及缓存 3221225472 字节已取得；HDR/画质效果不是本次样本覆盖范围 |
@@ -41,13 +41,13 @@ Electron **18.3.15**；Chromium **100.0.4896.160**；Node **16.13.2**；mpv **v0
 3. 隐藏窗口媒体测试超时；原始并行 UI/host 测试也出现一次启动超时，后续串行通过。媒体测试使用可见窗口并顺序执行。内存 API fixture 只证明客户端逻辑，不具有真实服务器 Session/网络的证明力。
 4. 815 个 E 类文件的精确官方来源，以及 Carnival EXE/bridge 的精确可复现构建来源仍不明；它们不在首次公开提交中。
 5. 实际安装使用用户授权的独立 E 盘目录且当前进程已提权；安装/覆盖/启动/卸载均通过，但未展示 UAC 交互，也没有单独验证 Program Files ACL。尚未正式发布。
-6. Mount Resolver 已完成静态、单元和隔离 runtime 验证；真实 Emby Mount 文件映射、不同编码、字幕/音轨差异和长时间稳定性尚未验证，不能写成真实服务器 Mount 通过。
+6. Mount Resolver 已完成静态、单元和隔离 runtime 验证；真实 Emby smoke 的 native fallback 与控制链通过，但当前路径条件没有自然 Mount 命中，real Emby Mount hit pending；不同编码、字幕/音轨差异和长时间稳定性尚未验证。
 
 ## 当前阻塞项与下一步
 
 用户已登录非管理员账号，明确允许选择任意影视测试，并确认全库为 STRM、WatchTogether 以后台控制正常为准。两个不同 STRM 样本的真实 DirectStream 播放、进度、Pause/Seek/Unpause/NextTrack/Stop 全部通过。每个样本的 Item/MediaSource/PlaySession 关联一致，停止报告均被服务器接受；画面已实际检查。测试会留下样本正常观看进度，未额外重置用户数据。
 
-本轮新增 `src/electronapp/resolvers/strm-resolver.js` 与 `mount-resolver.js`，在 `libmpv.playInternal` 的最终 `loadfile` 前执行 source replacement；PlaybackManager、Session、PlaySessionId、MediaSource、字幕/音轨索引和 offset 流程未改写。隔离 fixture 的普通媒体、无 Mount STRM fallback、Mount 命中、Pause/Seek/Unpause/Stop/NextTrack 和 20 条模拟上报均通过。实际构建输出为隔离 runtime，尚未重新生成正式安装包；真实 Emby Mount 和实机回归仍待用户授权/环境条件。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
+本轮新增 `src/electronapp/resolvers/strm-resolver.js` 与 `mount-resolver.js`，在 `libmpv.playInternal` 的最终 `loadfile` 前执行 source replacement；PlaybackManager、Session、PlaySessionId、MediaSource、字幕/音轨索引和 offset 流程未改写。隔离 fixture 的普通媒体、无 Mount STRM fallback、Mount 命中、Pause/Seek/Unpause/Stop/NextTrack 和 20 条模拟上报均通过。真实 Emby smoke 选取 2 个 STRM 样本，当前 `MediaSource.Path` 为不可解析的 other 形态，实际 DirectStream 保持 URL native source；全控制链和 10 条报告通过，real Emby Mount hit pending。没有修改服务器配置或测试数据。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
 
 ## 推荐继续入口
 
