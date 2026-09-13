@@ -10,6 +10,7 @@ if (!runtime || !evidence) throw Error('ETE_TEST_RUNTIME and ETE_TEST_EVIDENCE a
 app.setName('emby-theater-enhanced-smoke');
 let fixtureUrl;
 const mediaRequests = [];
+const resolverEvents = [];
 let fakeCd2Stats;
 if (process.env.ETE_TEST_PIPELINE) {
     const media = fs.readFileSync(process.env.ETE_TEST_MEDIA);
@@ -42,6 +43,7 @@ function finish(result) {
         count: mediaRequests.length,
         rangeCount: mediaRequests.filter(request => request.range).length
     };
+    result.resolverEvents = resolverEvents;
     if (fakeCd2Stats) {
         result.cd2Fake = {
             resolveCount: fakeCd2Stats.resolveCount,
@@ -73,6 +75,9 @@ setTimeout(async () => {
 }, process.env.ETE_TEST_CD2_EXPECT === 'real' ? 45000 : 25000);
 app.on('browser-window-created', (_, win) => {
     testWindow = win;
+    win.webContents.on('console-message', (_, level, message) => {
+        if (typeof message === 'string' && message.indexOf('STRM resolver:') === 0) resolverEvents.push(message);
+    });
     if (!process.env.ETE_TEST_VISIBLE) win.on('show', () => win.hide());
     win.webContents.on('did-fail-load', (_, code, description) => finish({ok:false, code, description}));
     win.webContents.on('did-finish-load', () => {
@@ -90,7 +95,13 @@ app.on('browser-window-created', (_, win) => {
                 if (!screenshot.isEmpty()) fs.writeFileSync(path.join(evidence, 'startup.png'), screenshot.toPNG());
                 if (process.env.ETE_TEST_PIPELINE) {
                     const source = fs.readFileSync(path.join(__dirname,'../tests/pipeline-browser.js'),'utf8');
-                    state.pipeline = await win.webContents.executeJavaScript(source + '\nrunPipelineFixture(' + JSON.stringify(fixtureUrl) + ', ' + JSON.stringify(process.env.ETE_TEST_MOUNT_SIDECAR || null) + ', ' + JSON.stringify(process.env.ETE_TEST_CD2_EXPECT || process.env.ETE_TEST_CD2_MODE || null) + ', ' + JSON.stringify(process.env.ETE_CD2_ORIGIN || null) + ')');
+                    state.pipeline = await win.webContents.executeJavaScript(source + '\nrunPipelineFixture(' + JSON.stringify(fixtureUrl) + ', ' + JSON.stringify(process.env.ETE_TEST_MOUNT_SIDECAR || null) + ', ' + JSON.stringify(process.env.ETE_TEST_CD2_EXPECT || process.env.ETE_TEST_CD2_MODE || null) + ', ' + JSON.stringify(testCd2Origin || null) + ', ' + JSON.stringify(process.env.ETE_TEST_STOP_BEFORE_PLAYER === '1') + ')');
+                    if (process.env.ETE_TEST_STOP_BEFORE_PLAYER === '1') {
+                        if (!state.pipeline.stopBeforePlayer || !Object.values(state.pipeline.stopBeforePlayer).every(Boolean)) {
+                            return finish({ok:false,error:'Stop-before-player assertion failed',state});
+                        }
+                        return finish({ok:true,versions:process.versions,state});
+                    }
                     if (!Object.values(state.pipeline.next).every(Boolean) || !state.pipeline.results.every(result => result.playerId==='libmpvmediaplayer' && Object.entries(result).filter(([k])=>!['kind','playerId'].includes(k)).every(([,v])=>v===true)) ||
                         (state.pipeline.generation && !Object.values(state.pipeline.generation).every(Boolean)) ||
                         (process.env.ETE_TEST_CD2_MODE === 'hit' && fakeCd2Stats.cancelCount < 2)) {

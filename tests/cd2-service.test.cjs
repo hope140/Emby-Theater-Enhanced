@@ -58,6 +58,25 @@ test('CD2 configuration stays disabled or reports missing token and mapping', as
     }
 });
 
+test('empty cloud prefix is missing while explicit root mapping is valid', async () => {
+    const base = {
+        ETE_CD2_ENABLED: '1',
+        ETE_CD2_ORIGIN: 'http://127.0.0.1:19798',
+        ETE_CD2_TOKEN: 'placeholder',
+        ETE_CD2_LOCAL_PREFIX: 'X:\\Media'
+    };
+    for (const cloudPrefix of [undefined, '', '   ']) {
+        const environment = Object.assign({}, base);
+        if (cloudPrefix !== undefined) environment.ETE_CD2_CLOUD_PREFIX = cloudPrefix;
+        const service = cd2.createService({environment});
+        assert.equal((await service.resolve({requestId: 'empty-cloud', candidates: ['X:\\Media\\a.mkv']})).reason, 'missing_mapping');
+    }
+
+    const rootConfig = cd2.readConfig(Object.assign({}, base, {ETE_CD2_CLOUD_PREFIX: '/'}));
+    assert.equal(rootConfig.error, undefined);
+    assert.equal(cd2.mapLocalPath('X:\\Media\\Show\\E01.mkv', rootConfig.localPrefix, rootConfig.cloudPrefix), '/Show/E01.mkv');
+});
+
 test('origin and single-prefix mapping enforce local transport and path boundaries', () => {
     assert.ok(cd2.parseOrigin('http://127.0.0.1:19798'));
     assert.ok(cd2.parseOrigin('http://localhost:19798'));
@@ -71,6 +90,10 @@ test('origin and single-prefix mapping enforce local transport and path boundari
     assert.equal(cd2.mapLocalPath('X:\\Media2\\E01.mkv', 'X:\\Media', '/cloud/media'), null);
     assert.equal(cd2.mapLocalPath('X:\\Media\\..\\secret', 'X:\\Media', '/cloud/media'), null);
     assert.equal(cd2.mapLocalPath('\\\\server\\share\\Show\\E01.mkv', '\\\\SERVER\\SHARE', '/cloud'), '/cloud/Show/E01.mkv');
+    assert.equal(cd2.mapLocalPath('/srv/media/Show/E01.mkv', '/srv/media', '/cloud'), '/cloud/Show/E01.mkv');
+    assert.equal(cd2.mapLocalPath('/srv/Media/Show/E01.mkv', '/srv/media', '/cloud'), null);
+    assert.equal(cd2.mapLocalPath('/srv/media2/E01.mkv', '/srv/media', '/cloud'), null);
+    assert.equal(cd2.mapLocalPath('/srv/media/../secret', '/srv/media', '/cloud'), null);
 });
 
 test('successful lookup uses only the two V1 unary RPCs and get_direct_url=false', async () => {

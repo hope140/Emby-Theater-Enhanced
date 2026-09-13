@@ -249,6 +249,30 @@ test('DirectStream can use a deterministic existing mount while preserving fallb
     }
 });
 
+test('absolute POSIX media source is a deterministic CD2 candidate', async () => {
+    const fixture = createFixture('Episode.strm', '/srv/media/Show/E01.mkv');
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {
+            fs,
+            requestId: 'posix-candidate',
+            cd2Transport: {
+                resolve: async request => {
+                    assert.deepEqual(request.candidates, ['/srv/media/Show/E01.mkv']);
+                    return {status: 'hit', type: 'url', source: 'http://127.0.0.1:19798/source'};
+                }
+            }
+        });
+        assert.equal(result.type, 'url');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
 test('async STRM resolution prefers CD2 URL over an existing Mount candidate', async () => {
     const fixture = createFixture('Movie.mkv.strm');
     const local = path.join(fixture.directory, 'Movie.mkv');
@@ -353,5 +377,66 @@ test('aborted async CD2 request is cancelled and never reaches fallback', async 
     controller.abort();
     await assert.rejects(pending, error => error && error.name === 'AbortError');
     assert.equal(cancelled, true);
+    fixture.cleanup();
+});
+
+test('rejected CD2 transport still falls through to an existing Mount candidate', async () => {
+    const fixture = createFixture('Rejected.mkv.strm');
+    const local = path.join(fixture.directory, 'Rejected.mkv');
+    fs.writeFileSync(local, 'fixture');
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {fs, requestId: 'reject-mount', cd2Transport: {resolve: () => Promise.reject(new Error('synthetic transport failure'))}});
+        assert.equal(result.type, 'local');
+        assert.equal(result.source, local);
+        assert.equal(result.cd2Reason, 'transport_error');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('rejected CD2 transport falls through to Native when Mount is missing', async () => {
+    const fixture = createFixture('Rejected.mkv.strm');
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {fs, requestId: 'reject-native', cd2Transport: {resolve: () => Promise.reject(new Error('synthetic transport failure'))}});
+        assert.equal(result.type, 'native');
+        assert.equal(result.source, fixture.nativeSource);
+        assert.equal(result.cd2Reason, 'transport_error');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('rejected transport after abort never reaches Mount fallback', async () => {
+    const fixture = createFixture('Aborted.mkv.strm');
+    const local = path.join(fixture.directory, 'Aborted.mkv');
+    fs.writeFileSync(local, 'fixture');
+    const controller = new AbortController();
+    let rejectTransport;
+    const pending = strmResolver.resolveAsync({
+        item: {Path: fixture.sidecarPath},
+        mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+        url: fixture.nativeSource,
+        playMethod: 'DirectPlay'
+    }, {
+        fs,
+        requestId: 'reject-abort',
+        signal: controller.signal,
+        cd2Transport: {
+            resolve: () => new Promise((resolve, reject) => { rejectTransport = reject; }),
+            cancel: () => rejectTransport(new Error('cancelled transport'))
+        }
+    });
+    controller.abort();
+    await assert.rejects(pending, error => error && error.name === 'AbortError');
     fixture.cleanup();
 });
