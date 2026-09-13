@@ -1,12 +1,12 @@
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
-        define(['./mount-resolver.js'], factory);
+        define(['./mount-resolver.js', './cd2-resolver.js'], factory);
     } else if (typeof module === 'object' && module.exports) {
-        module.exports = factory(require('./mount-resolver'));
+        module.exports = factory(require('./mount-resolver'), require('./cd2-resolver'));
     } else {
-        root.strmResolver = factory(root.mountResolver);
+        root.strmResolver = factory(root.mountResolver, root.cd2Resolver);
     }
-}(this, function (mountResolver) {
+}(this, function (mountResolver, cd2Resolver) {
     'use strict';
 
     function isObject(value) {
@@ -64,31 +64,40 @@
         };
     }
 
-    function resolve(options, dependencies) {
+    function prepare(options) {
         var context = normalizeContext(options || {});
         var detected = isStrm(context);
         var playMethod;
-        var result;
 
         if (!context.item || !context.mediaSource ||
             typeof context.sidecarPath !== 'string' || !context.sidecarPath ||
             typeof context.sourcePath !== 'string' || !context.sourcePath ||
             typeof context.nativeSource !== 'string' || !context.nativeSource) {
-            return nativeResult(context.nativeSource, 'invalid_context', detected);
+            return {context: context, result: nativeResult(context.nativeSource, 'invalid_context', detected)};
         }
 
         if (!detected) {
-            return nativeResult(context.nativeSource, 'not_strm', false);
+            return {context: context, result: nativeResult(context.nativeSource, 'not_strm', false)};
         }
 
         playMethod = typeof context.playMethod === 'string' ? context.playMethod.toLowerCase() : '';
         if (playMethod === 'transcode') {
-            return nativeResult(context.nativeSource, 'transcode_skip', true);
+            return {context: context, result: nativeResult(context.nativeSource, 'transcode_skip', true)};
         }
 
         if (playMethod !== 'directplay' && playMethod !== 'directstream') {
-            return nativeResult(context.nativeSource, 'unsupported_play_method', true);
+            return {context: context, result: nativeResult(context.nativeSource, 'unsupported_play_method', true)};
         }
+
+        return {context: context, result: null};
+    }
+
+    function resolve(options, dependencies) {
+        var prepared = prepare(options);
+        var context = prepared.context;
+        var result;
+
+        if (prepared.result) return prepared.result;
 
         try {
             result = mountResolver.resolve(context, dependencies);
@@ -99,9 +108,46 @@
         }
     }
 
+    async function resolveAsync(options, dependencies) {
+        var prepared = prepare(options);
+        var context = prepared.context;
+        var candidates;
+        var cd2Reason;
+        var result;
+
+        if (prepared.result) return prepared.result;
+
+        try {
+            candidates = mountResolver.getCandidates(context, dependencies);
+            if (candidates.length) {
+                result = await cd2Resolver.resolve(context, {
+                    cd2Transport: dependencies && dependencies.cd2Transport,
+                    requestId: dependencies && dependencies.requestId,
+                    signal: dependencies && dependencies.signal,
+                    candidates: candidates
+                });
+                if (result && result.type === 'url') {
+                    result.isStrm = true;
+                    result.localExists = false;
+                    return result;
+                }
+                cd2Reason = result && result.reason;
+            }
+
+            result = mountResolver.resolve(context, dependencies);
+            result.isStrm = true;
+            if (cd2Reason) result.cd2Reason = cd2Reason;
+            return result;
+        } catch (error) {
+            if (error && error.name === 'AbortError') throw error;
+            return nativeResult(context.nativeSource, 'native_fallback', true);
+        }
+    }
+
     return {
         isStrm: isStrm,
         resolve: resolve,
+        resolveAsync: resolveAsync,
         resolveStrm: resolve
     };
 }));
