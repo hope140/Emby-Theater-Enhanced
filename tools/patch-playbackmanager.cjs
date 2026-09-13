@@ -116,4 +116,12 @@ replaceOnce(
     '                }'
 );
 
+replaceOnce(
+    'terminal stop invalidation',
+    '    (PlaybackManager.prototype.stop = function (player) {\n      return (player = player || this._currentPlayer)',
+    '    (PlaybackManager.prototype.stop = function (player) {\n' +
+    '      this._etePlayRequestSequence = (this._etePlayRequestSequence || 0) + 1;\n' +
+    '      return (player = player || this._currentPlayer)'
+);
+
 fs.writeFileSync(file, source, 'utf8');

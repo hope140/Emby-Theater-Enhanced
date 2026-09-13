@@ -79,26 +79,41 @@ function normalizeLocalPath(value) {
     return parsed.root + parsed.parts.join('\\');
 }
 
+function normalizeMappingPrefix(value) {
+    const source = String(value || '').trim();
+    if (!source) return null;
+    if (!source.startsWith('/')) return normalizeLocalPath(source);
+    const parts = source.replace(/\\/g, '/').split(/\/+/).filter(Boolean);
+    if (parts.some(function (part) { return part === '.' || part === '..'; })) return null;
+    return '/' + parts.join('/');
+}
+
 function normalizeCloudPath(value) {
     const source = String(value || '').trim().replace(/\\/g, '/');
+    if (!source) return null;
     const parts = source.split(/\/+/).filter(Boolean);
     if (parts.some(function (part) { return part === '.' || part === '..'; })) return null;
     return '/' + parts.join('/');
 }
 
 function mapLocalPath(localPath, localPrefix, cloudPrefix) {
-    const local = normalizeLocalPath(localPath);
-    const prefix = normalizeLocalPath(localPrefix);
+    const prefix = normalizeMappingPrefix(localPrefix);
     const cloud = normalizeCloudPath(cloudPrefix);
+    const isPosix = prefix && prefix.startsWith('/');
+    const local = isPosix ? normalizeMappingPrefix(localPath) : normalizeLocalPath(localPath);
     let suffix;
 
     if (!local || !prefix || !cloud) return null;
-    if (local.toLowerCase() !== prefix.toLowerCase() &&
-        !local.toLowerCase().startsWith(prefix.replace(/\\$/, '').toLowerCase() + '\\')) {
-        return null;
+    if (isPosix) {
+        if (local !== prefix && !local.startsWith(prefix.replace(/\/$/, '') + '/')) return null;
+        suffix = local.slice(prefix.replace(/\/$/, '').length).replace(/^\/+/, '');
+    } else {
+        if (local.toLowerCase() !== prefix.toLowerCase() &&
+            !local.toLowerCase().startsWith(prefix.replace(/\\$/, '').toLowerCase() + '\\')) {
+            return null;
+        }
+        suffix = local.slice(prefix.replace(/\\$/, '').length).replace(/^\\+/, '');
     }
-
-    suffix = local.slice(prefix.replace(/\\$/, '').length).replace(/^\\+/, '');
     return normalizeCloudPath(cloud + (suffix ? '/' + suffix.replace(/\\/g, '/') : ''));
 }
 
@@ -108,7 +123,7 @@ function readConfig(environment) {
         enabled: isEnabled(env.ETE_CD2_ENABLED),
         origin: parseOrigin(env.ETE_CD2_ORIGIN),
         token: String(env.ETE_CD2_TOKEN || '').replace(/^Bearer\s+/i, '').trim(),
-        localPrefix: normalizeLocalPath(env.ETE_CD2_LOCAL_PREFIX),
+        localPrefix: normalizeMappingPrefix(env.ETE_CD2_LOCAL_PREFIX),
         cloudPrefix: normalizeCloudPath(env.ETE_CD2_CLOUD_PREFIX),
         totalBudgetMs: DEFAULT_TOTAL_BUDGET_MS
     };
@@ -367,6 +382,7 @@ module.exports = {
     mapLocalPath: mapLocalPath,
     normalizeCloudPath: normalizeCloudPath,
     normalizeLocalPath: normalizeLocalPath,
+    normalizeMappingPrefix: normalizeMappingPrefix,
     parseOrigin: parseOrigin,
     readConfig: readConfig,
     resolveDownloadUrl: resolveDownloadUrl

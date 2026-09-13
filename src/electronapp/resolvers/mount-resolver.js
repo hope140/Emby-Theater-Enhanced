@@ -47,6 +47,10 @@
         );
     }
 
+    function isPosixLocalPath(value) {
+        return typeof value === 'string' && /^\/(?!\/)/.test(value);
+    }
+
     function basename(value) {
         var lastSlash;
 
@@ -250,7 +254,7 @@
             return {candidates: candidates, result: result, failed: false};
         }
 
-        if (isWindowsLocalPath(sourcePath)) {
+        if (isWindowsLocalPath(sourcePath) || isPosixLocalPath(sourcePath)) {
             if (hasMediaExtension(sourcePath)) {
                 result = addCandidate(sourcePath);
                 if (result) {
@@ -310,6 +314,7 @@
     return {
         deriveSidecarStem: deriveSidecarStem,
         getCandidates: getCandidates,
+        isPosixLocalPath: isPosixLocalPath,
         isWindowsLocalPath: isWindowsLocalPath,
         resolve: resolve
     };

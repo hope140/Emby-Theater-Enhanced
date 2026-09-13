@@ -59,6 +59,9 @@
                 return {type: 'url', source: response.source, reason: 'cd2_hit', fallback: false};
             }
             return miss(response && response.reason);
+        } catch (error) {
+            if ((signal && signal.aborted) || (error && error.name === 'AbortError')) throw abortError();
+            return miss('transport_error');
         } finally {
             if (signal) signal.removeEventListener('abort', abortListener);
         }
