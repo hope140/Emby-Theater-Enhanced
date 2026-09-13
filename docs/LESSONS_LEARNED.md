@@ -33,3 +33,8 @@
 31. CloudDrive2 drive-letter mount point 可能返回 `X:`；作为绝对 mapping root 使用时必须规范化为 `X:\`。`X:folder` 是当前盘符相对路径，应该继续拒绝。
 32. 可见 frozen Electron media fixture 必须串行；并行运行会竞争 Pepper/GPU/窗口资源并产生无关超时。失败后先核对残留进程，再用相同参数串行复跑。
 33. “CD2 URL 已成为 currentSrc”只证明 source replacement；没有 `core-playing`、控制和报告证据时，不能写成真实 Enhanced CD2 playback 通过。
+34. terminal `PlaybackManager.stop()` 与新 Play 内部 `activePlayer.stop()` 语义不同；只在 terminal API 失效 request sequence，才能关闭 Stop-before-player.play 而不让换集流程自我取消。
+35. CD2 transport Promise reject 必须转为 miss 后继续 Mount/Native；只有 Abort/superseded 可以跳过 fallback 并向上终止。
+36. 空 cloudPrefix 与显式 `/` 必须区分：前者是缺配置，后者是合法 cloud-root mapping。
+37. 真实 Emby 的 Item/MediaSource 路径可能是 absolute POSIX，即使客户端运行在 Windows。单条 mapping 需要按路径风格选择大小写规则，不能把 Windows 平台等同于 Windows source identity。
+38. Pepper bridge 当前没有转发 mpv start-file/file-loaded/end-file/log-message；真实媒体验收可直接观察 path/core-playing/core-idle/time-pos，并以 file-format+track-list 推断 file-loaded，但必须标明证据性质。

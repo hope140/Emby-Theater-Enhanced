@@ -1,5 +1,24 @@
 # 开发日志
 
+## 2026-09-13 — PR #2 merge-blocker 修正与真实媒体诊断
+
+保持 `feat/cd2-resolver`，没有同步 `origin/main`，也没有修改另一会话正在维护的 `AGENTS.md` 或 `docs/AI_MODEL_POLICY.md`。本轮关闭三个代码 blocker：仅 terminal `PlaybackManager.prototype.stop()` 增加 request invalidation，新 Play 内部 previous-player stop 不受影响；非 Abort 的 IPC/transport reject 转为安全 `transport_error` miss 后继续 Mount → Native，Abort 仍向上终止；空/缺失 cloudPrefix 为 `missing_mapping`，显式 `/` 保持合法。
+
+真实 Emby 只读选择新增证据：两个 STRM 样本的 Item.Path 与 MediaSource.Path 都是 absolute POSIX，而不是 Windows drive/UNC。现有 ETLP `src→dst` 与 `dst→cloud` 两段单规则可安全折叠。因此单条 mapping 扩展为 Windows drive/UNC 或 absolute POSIX local prefix；Windows/UNC 大小写不敏感，POSIX 大小写敏感，边界与 `..` 检查一致。带 allowlisted 媒体后缀的 absolute POSIX MediaSource.Path 成为确定性 CD2 candidate，在 Windows Mount 中仍自然 miss；未增加第二条 mapping、regex、扫描或自动学习。
+
+targeted tests 为 38/38。独立 frozen Stop-before-player 测试使 PlaybackInfo pending，执行真实 PlaybackManager Stop 后再释放响应，断言 Promise 收束、`player.play` 未调用、无 Playing report。transport reject 分别验证 Mount 与 Native，Abort 不 fallback；cloudPrefix 空/显式 root 与 POSIX 边界均覆盖。完整 CD2 hit、Mount、Native、generation/cancel、双 NextTrack 和报告回归串行通过；其中一次可见 Electron 在 STRM 阶段偶发超时，同参数串行复跑通过并保留失败证据。
+
+真实 CD2 media 诊断使用有限 80 目录/2000 entry 范围内的普通 `mkv-medium`。final frozen runtime 观察到 resolved path 被 mpv 接受、file-format=MKV、13 tracks（1 video/1 audio）、`core-playing` event、`core-idle=false`、cache state/time 与 time-pos 推进，未观察到 EOF/error。Pepper bridge 不暴露 start-file/file-loaded/end-file/log-message，所以 start/end 标记为不可直接观察，file-loaded 由 format+track list 推断。默认音视频轨存在，本轮未处理用户另报的手动音轨问题。
+
+真实 Emby 全链只在独立 media 成功后尝试。两次均在 inspect 阶段返回 `not-logged-in`，未选择播放、未触发 CD2、未产生新 Playing/Progress/Stopped；0 残留进程。因此真实 Emby CD2 hit、Session、WebSocket、controls、reports 保持未验收，原因是当前登录态不可用，不是 media/core-playing 失败。
+
+最终候选与 repeat 各 2156 个 manifest 载荷、0 SHA256 差异、0 runtime native addon。隔离 installer SHA256 与 payload 结果见最新 Packaging/Testing 记录。本轮未修改 CD2 配置、mount、cache、账号、媒体、Emby metadata、权限或服务器配置。
+
+Model Tier: 2
+Model: GPT-5.6 Sol
+Reason: merge-blocking PlaybackManager race, resolver fallback correctness, real mpv event diagnosis and real Emby acceptance
+Escalated: no
+
 ## 2026-09-13 — CloudDrive2 Resolver PR #2 实现与验证
 
 从已推送的 `main` 文档基线 `6888780` 创建 `feat/cd2-resolver`。本轮实现 `CD2 same-origin HTTP → Mount → Native`，Transcode 永远 Native；没有实现 DirectUrl、User-Agent/additionalHeaders、expiresIn recovery、115 Open API、refresh/retry、复杂 mapping、设置 UI、自动发现或 cache 管理。

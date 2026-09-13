@@ -35,9 +35,9 @@ package 校验 build-manifest 中的全部载荷及额外文件，调用 Inno �
 
 ## 可重复性
 
-第一轮两次分别构建到不同输出目录，1013 个文件（含 build-manifest）SHA256 全部相同。CD2 PR #2 的最终 `pr2-k` / `pr2-l` runtime 各有 2156 个 manifest 载荷，逐文件 SHA256 0 差异；连同 `build-manifest.json` 实际为 2157 文件。这里的可重复是 runtime 载荷一致，未声称 setup.exe 位级确定性或 native binary 源码重建。
+第一轮两次分别构建到不同输出目录，1013 个文件（含 build-manifest）SHA256 全部相同。CD2 merge review 的 final/repeat runtime 各有 2156 个 manifest 载荷，逐文件 SHA256 0 差异；连同 `build-manifest.json` 实际为 2157 文件。这里的可重复是 runtime 载荷一致，未声称 setup.exe 位级确定性或 native binary 源码重建。
 
-PR #2 的隔离 installer 候选已编译并用 innounp 解包，2157 个 `{app}` 文件与 `pr2-k` runtime 逐文件哈希一致，grpc-js、proto 存在且 production dependency closure 中没有 native addon。本轮没有运行安装器或执行系统安装。
+PR #2 merge review 的隔离 installer 候选已编译并用 innounp 解包，2157 个 `{app}` 文件与 final runtime 逐文件哈希一致，grpc-js、proto 存在且 production dependency closure 中没有 native addon。本轮没有运行安装器或执行系统安装。
 
 build 拒绝覆盖已有目录；重复构建使用 `-OutputName`。package 同样拒绝覆盖已有 setup。旧产物应由用户保留或在明确范围内处理，脚本不执行递归删除。
 

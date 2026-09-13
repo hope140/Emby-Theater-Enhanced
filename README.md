@@ -8,7 +8,7 @@ Emby Theater Enhanced 是非官方的社区维护项目，与 Emby 不存在隶�
 
 第一轮已建立源码、输入清单、构建脚本、Inno 安装包、播放/远控审计与容错诊断。本地测试、实际安装生命周期、真实 STRM 播放及服务器后台控制均已通过；WatchTogether 按用户确认的后台控制口径验收。普通文件库内无样本，完整结果见 [LIVE_ACCEPTANCE](docs/LIVE_ACCEPTANCE.md) 和 [PROJECT_STATUS](docs/PROJECT_STATUS.md)。
 
-当前 `feat/cd2-resolver` 候选在原 PlaybackManager/Session 链内增加 CloudDrive2 same-origin HTTP source，失败顺序为 Mount → Native，Transcode 保持 Native。自动、fake、frozen runtime 和真实 CD2 只读解析已通过；真实 CD2 media 起播与真实 Emby Session/控制仍待验收，不能视为已发布能力。
+当前 `feat/cd2-resolver` 候选在原 PlaybackManager/Session 链内增加 CloudDrive2 same-origin HTTP source，失败顺序为 Mount → Native，Transcode 保持 Native。自动、fake、frozen runtime、真实 CD2 只读解析和独立真实 MKV 播放已通过；真实 Emby 全链因保存登录态不可用仍待验收，不能视为已发布能力。
 
 ## 使用本地构建
 

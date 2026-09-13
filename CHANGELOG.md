@@ -6,7 +6,7 @@
 - STRM source 优先级更新为 CD2 HTTP → Mount → Native；Transcode 保持 Native，DirectUrl 延后。
 - 新增 PlaybackManager request id、libmpv generation、RPC cancel、旧 core-playing listener 清理与 750ms absolute budget。
 - frozen runtime 构建精确复制 grpc-js/proto-loader production closure，并拒绝 native addon；两次构建与 installer 解包逐哈希一致。
-- unit/fake/frozen runtime 与真实 CD2 只读 smoke 通过；真实 CD2 source replacement 已确认，但真实 media 起播与真实 Emby Session/控制仍待验收。
+- unit/fake/frozen runtime、Stop-before-player、transport fallback、真实 CD2 只读 smoke 与独立真实 MKV 播放通过；真实 Emby Session/控制因保存登录态不可用仍待验收。
 
 ## 0.1.1 开发候选 — 2026-09-12
 

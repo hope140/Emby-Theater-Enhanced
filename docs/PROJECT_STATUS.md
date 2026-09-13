@@ -1,6 +1,6 @@
 # 项目状态
 
-更新时间 2026-09-13（UTC+8）。**第一轮真实 STRM、Session、后台控制链已通过；`main` 包含 `6888780` 的 CloudDrive2 架构评审基线，当前 `feat/cd2-resolver` 已完成 PR #2 候选实现与自动/隔离验证。V1 链为 `CD2 same-origin HTTP → Mount → Native`，Transcode 永远 Native；DirectUrl 延后。真实 CD2 RPC、HEAD/Range 与最终 source replacement 已确认，但真实 CD2 media 在隔离 libmpv 中 45 秒未进入 `core-playing`，因此真实 Enhanced + CD2 播放、真实 Emby Session/控制仍待验收。**
+更新时间 2026-09-13（UTC+8）。**PR #2 merge-blocker 修正已完成：terminal PlaybackManager Stop 可淘汰尚未进入 player 的旧请求；transport reject 继续 Mount/Native；空 cloudPrefix 拒绝、显式 `/` 合法。独立真实 CD2 `mkv-medium` 已观察到 path 接受、MKV/track list、`core-playing`、`core-idle=false`、cache state 与 time-pos 推进。真实 Emby 样本路径确认为 POSIX，单条 mapping 已补充 POSIX 安全支持；但现有登录态随后连续两次在 inspect 阶段返回 `not-logged-in`，未开始播放或触发 CD2，因此真实 Emby Session/控制仍待验收。**
 
 ## 接手摘要
 
@@ -17,7 +17,7 @@
 |---|---|
 | 工程目录和知识库 | 完成；公开 Git baseline 已推送，Mount Resolver 已合并到 `main` |
 | Carnival 分类与 vendor 清单 | 完成；E 类 815 文件精确上游来源未确认 |
-| 可重复 runtime 构建 | 通过；PR #2 最终 `pr2-k/l` 各 2156 个 manifest 载荷，逐文件 SHA256 0 差异 |
+| 可重复 runtime 构建 | 通过；merge review final/repeat 各 2156 个 manifest 载荷，逐文件 SHA256 0 差异 |
 | 原 Windows host 启动 | 测试副本通过；host+4 Electron 进程、诊断日志 |
 | Electron UI 与播放器注册 | 通过，已视觉查看；无 externalplayer |
 | Inno 安装包 | PR #2 隔离编译/解包通过，2157 个 `{app}` 文件与 runtime 逐哈希一致；本轮未执行系统安装 |
@@ -26,7 +26,7 @@
 | Session / Remote Control | 非管理员账号下，真实服务器接受命令、WebSocket 送达、播放器响应及服务端状态回读全部通过 |
 | WatchTogether | 按用户确认的后台控制正常口径通过；未宣称插件双客户端同步精度已测试 |
 | STRM Mount Resolver | 已实现 Detection、Mount → Native contract、确定性优先级、媒体扩展 allowlist、Transcode protection 和安全诊断；Node 19/19、隔离 runtime 命中通过；真实 native fallback 通过，real Emby Mount hit pending |
-| CloudDrive2 Resolver PR #2 | 候选实现完成；main-process grpc-js、窄 IPC、单条 mapping、750ms absolute budget、generation/cancel、CD2 → Mount → Native 和 Transcode protection 已通过 unit/fake/frozen runtime；真实 CD2 source 可解析但真实 media 起播待关闭 |
+| CloudDrive2 Resolver PR #2 | merge blocker 已修正；38/38、fake/frozen、Stop-before-player、reject fallback、POSIX mapping、真实 CD2 media core-playing 通过；真实 Emby 因登录态不可用未执行 |
 | External Player | 已禁用入口并测试；保留旧实现 |
 | 环境诊断 | 实际 Electron/Chrome/Node、DLL API/version、ready/playing 已取得 |
 | mpv.conf / GPU / HDR | 配置规则/隔离通过；真实样本 gpu-next、d3d11va 硬解及缓存 3221225472 字节已取得；HDR/画质效果不是本次样本覆盖范围 |
@@ -43,7 +43,7 @@ Electron **18.3.15**；Chromium **100.0.4896.160**；Node **16.13.2**；mpv **v0
 4. 815 个 E 类文件的精确官方来源，以及 Carnival EXE/bridge 的精确可复现构建来源仍不明；它们不在首次公开提交中。
 5. 实际安装使用用户授权的独立 E 盘目录且当前进程已提权；安装/覆盖/启动/卸载均通过，但未展示 UAC 交互，也没有单独验证 Program Files ACL。尚未正式发布。
 6. Mount Resolver 已完成静态、单元和隔离 runtime 验证；真实 Emby smoke 的 native fallback 与控制链通过，但当前路径条件没有自然 Mount 命中，real Emby Mount hit pending；不同编码、字幕/音轨差异和长时间稳定性尚未验证。
-7. CloudDrive2 PR #2 已完成 main-process 纯 JS gRPC、单条 mapping、750ms 总预算及 generation/late-response 防护。真实临时 mapping 命中，same-origin HEAD 200 / Range 206；隔离播放器 `currentSrc` 已确认切到 CD2 origin，但选定真实媒体在 45 秒内未产生 `core-playing`。这不能记为真实 Enhanced 播放通过，也不能替代真实 Emby Session、WebSocket、报告和控制验收。
+7. CloudDrive2 PR #2 已完成 main-process 纯 JS gRPC、单条 Windows/UNC/POSIX mapping、750ms 总预算及 generation/late-response 防护。真实临时 mapping 命中，same-origin HEAD 200 / Range 206；有限候选中的普通 MKV 已实际 `core-playing` 并推进。Pepper bridge 不直接暴露 start-file/file-loaded/end-file/log-message；path 可直接观察，file-loaded 由 MKV format 与 13-track list 推断，未观察到 EOF/error。
 8. 当前配置仅通过环境变量或 ignored local config 注入，不含设置 UI/credential storage。DirectUrl、User-Agent/additionalHeaders、expiresIn recovery、refresh/retry、多 mapping、provider 特判和 CD2 cache 管理均不在 PR #2。
 
 ## 当前阻塞项与下一步
@@ -52,7 +52,7 @@ Electron **18.3.15**；Chromium **100.0.4896.160**；Node **16.13.2**；mpv **v0
 
 本轮新增 `src/electronapp/resolvers/strm-resolver.js` 与 `mount-resolver.js`，在 `libmpv.playInternal` 的最终 `loadfile` 前执行 source replacement；PlaybackManager、Session、PlaySessionId、MediaSource、字幕/音轨索引和 offset 流程未改写。隔离 fixture 的普通媒体、无 Mount STRM fallback、Mount 命中、Pause/Seek/Unpause/Stop/NextTrack 和 20 条模拟上报均通过。真实 Emby smoke 选取 2 个 STRM 样本，当前 `MediaSource.Path` 为不可解析的 other 形态，实际 DirectStream 保持 URL native source；全控制链和 10 条报告通过，real Emby Mount hit pending。没有修改服务器配置或测试数据。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
 
-PR #2 新增 `cd2-resolver.js` 与 main-process `cd2-service.js`/`cd2-ipc.js`，通过 build-time overlay 给未公开 PlaybackManager 增加 request id，libmpv 使用 monotonic generation、AbortController 和 gRPC cancel。33/33 Node tests 通过；frozen Electron 中 dependency require、fake gRPC、CD2 hit、Mount/Native fallback、Play/Pause/Seek/Unpause/NextTrack/Stop、19 条报告、双 NextTrack、3 次 active cancel 与 0 active leak 通过。真实 CD2 仅执行只读 RPC/HEAD/Range；未修改 CD2、Emby、服务器、mount、cache、账号或网盘数据。
+PR #2 新增 `cd2-resolver.js` 与 main-process `cd2-service.js`/`cd2-ipc.js`，通过 build-time overlay 给未公开 PlaybackManager 增加 request id，libmpv 使用 monotonic generation、AbortController 和 gRPC cancel。38/38 Node tests 通过；独立 frozen Stop-before-player 断言旧请求未调用 `player.play`、未产生 Playing。完整 frozen Electron 中 dependency require、fake gRPC、CD2 hit、Mount/Native fallback、Play/Pause/Seek/Unpause/NextTrack/Stop、19 条报告、双 NextTrack、3 次 active cancel 与 0 active leak 通过。真实 CD2 media 通过；真实 Emby 两次 `not-logged-in`，未执行播放。未修改 CD2、Emby、服务器、mount、cache、账号或网盘数据。
 
 ## 推荐继续入口
 

@@ -724,3 +724,19 @@ Recommended model for implementation: GPT-5.6 Sol High
 The minimal proto SHA256 is `dbd103f5530863d7ef3726ef7c39e4a686e960296a750389bbf454cc252accb6`. The official current download reported schema 1.0.14; descriptor/field inspection found the two V1 RPCs and used field numbers unchanged from the verified 1.0.13 source. Runtime packaging copies 33 production JavaScript packages and contains no `.node` addon.
 
 Validation reached Node 33/33, frozen Electron fake gRPC/HTTP, CD2 hit, both fallback paths, three active-call cancellations, double NextTrack, Stop and unchanged PlaybackManager identities/reports. Real CD2 read-only mapping/RPC/HEAD 200/Range 206 passed. A real CD2 source became the isolated libmpv `currentSrc`, but did not reach `core-playing` within 45 seconds; real Enhanced media playback and real Emby Session/control remain pending. No CD2 setting, mount, cache, account, media or server state was modified.
+
+## 17. Merge-review corrections
+
+Merge review closed three implementation gaps:
+
+- terminal `PlaybackManager.stop()` now invalidates a request still pending before `player.play`; internal previous-player stops used by a newer Play do not invalidate that newer request;
+- a rejected IPC/transport Promise becomes `transport_error` and continues Mount → Native, while Abort/superseded still terminate without fallback;
+- empty/missing cloudPrefix is `missing_mapping`, while explicit `/` remains a valid cloud-root mapping.
+
+Real Emby read-only inspection showed Item.Path and MediaSource.Path are absolute POSIX for the selected STRM samples. The single mapping therefore supports either Windows drive/UNC or absolute POSIX local prefix; Windows/UNC comparison is case-insensitive, POSIX is case-sensitive, and both keep strict boundary and traversal checks. An allowlisted absolute POSIX MediaSource.Path is a deterministic CD2 candidate and remains a Mount miss on Windows. This is still one explicit mapping, not multiple rules or automatic discovery.
+
+Targeted tests reached 38/38. A dedicated frozen runtime test held PlaybackInfo pending, invoked terminal Stop, then released the response: the request settled without calling `player.play` and without a Playing report. CD2 hit, reject/miss fallbacks, Abort, double NextTrack, active cancellation and old-core-listener coverage remained green.
+
+The real-media failure was sample/diagnostic-specific, not a general CD2 HTTP incompatibility. A bounded second selection produced a normal medium-size MKV. The final frozen runtime observed the CD2 path accepted, MKV format, 13 tracks including one video and one audio, `core-playing`, `core-idle=false`, cache state/time and advancing time-pos; no EOF/error was observed. The Pepper bridge does not expose native start-file/file-loaded/end-file/log-message events, so start/end remain not directly observable and file-loaded is inferred from format plus track list.
+
+Real Emby full-chain acceptance was attempted only after that success. Both bounded attempts stopped at inspect with `not-logged-in`; no media was played and CD2, Session, WebSocket, controls and reports were not exercised. Those server-backed checks remain pending because the saved login state was unavailable.

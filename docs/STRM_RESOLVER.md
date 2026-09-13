@@ -44,7 +44,7 @@ Resolver 使用三个严格分离的路径字段。
 
 1. 复用 Mount Resolver 的确定性媒体候选，不扫描目录、不解析 provider opaque id。
 2. main process 读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX`；token 不进入 renderer、诊断或日志。
-3. V1 仅支持一条 Windows local prefix → POSIX cloud prefix mapping；drive/UNC 大小写不敏感、严格路径边界、拒绝 `..`。
+3. V1 仅支持一条 local prefix → POSIX cloud prefix mapping；drive/UNC 大小写不敏感，absolute POSIX 大小写敏感，均严格检查路径边界并拒绝 `..`。absolute POSIX `MediaSource.Path` 带 allowlisted 媒体后缀时是确定性 CD2 candidate，但在 Windows Mount 检查中自然 miss。
 4. 只调用 `FindFileByPath` 和 `GetDownloadUrlPath(preview=false, lazy_read=false, get_direct_url=false)`；只接受 regular file、完整 placeholder、HTTP(S) 与相同 scheme/host/port。
 5. foreign host/port、DirectUrl、externalUrl、未知 scheme、空/目录/异常响应和 RPC failure 全部视为 CD2 miss，再走 Mount → Native。
 
@@ -76,4 +76,4 @@ URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、
 
 ## Known limitations
 
-当前 unit/fake/frozen Electron 已覆盖 CD2 hit、CD2 miss → Mount、CD2 miss → Native、Transcode、timeout、cancel、late callback、双 NextTrack、Stop 和旧 `core-playing` listener；PlaybackManager fixture 中 Item/MediaSource/PlaySessionId、控制与报告保持。真实 CD2 只读 RPC、same-origin HEAD/Range 和 source replacement 已确认；真实 CD2 media 在隔离 libmpv 中 45 秒未到 `core-playing`，真实 Emby + CD2 Session/控制仍待验收。DirectUrl、refresh、retry、复杂 mapping 与设置 UI 留待后续。
+当前 unit/fake/frozen Electron 已覆盖 CD2 hit、transport reject → Mount/Native、CD2 miss → Mount/Native、Transcode、timeout、Abort、cancel、late callback、双 NextTrack、libmpv Stop、PlaybackManager Stop-before-player.play 和旧 `core-playing` listener；PlaybackManager fixture 中 Item/MediaSource/PlaySessionId、控制与报告保持。独立真实 CD2 MKV 已观察 `core-playing`、`core-idle=false`、track list、cache state 与 time-pos 推进。真实 Emby 两次在 inspect 阶段返回 `not-logged-in`，没有开始播放或触发 CD2，因此真实 Session/控制仍待验收。DirectUrl、refresh、retry、多 mapping 与设置 UI 留待后续。
