@@ -1,7 +1,7 @@
 // Executed only by the local integration harness in an isolated Electron profile.
 // Real PlaybackManager + ApiClient report serializers + message dispatcher;
 // API responses and delivery are in memory, not a real Emby server/session.
-async function runPipelineFixture(fixture) {
+async function runPipelineFixture(fixture, mountSidecar) {
     const trace = window.__pipelineTrace = [];
     window.addEventListener('unhandledrejection', event=>trace.push('rejection: '+String(event.reason)));
     const deps = await new Promise((resolve,reject) => require([
@@ -62,7 +62,7 @@ async function runPipelineFixture(fixture) {
     for (const kind of ['video','strm']) {
         trace.push('starting '+kind);
         activeItem = {Id:'fixture-'+kind,ServerId:'fixture-server',Name:'Synthetic '+kind,
-            MediaType:'Video',Type:'Movie',Path:kind==='strm'?'fixture-sidecar.strm':fixture,
+            MediaType:'Video',Type:'Movie',Path:kind==='strm'?(mountSidecar || 'fixture-sidecar.strm'):fixture,
             RunTimeTicks:50000000,UserData:{},MediaStreams:[]};
         items.set(activeItem.Id,activeItem);
         await manager.play({items:[activeItem],fullscreen:true,startPositionTicks:0});
@@ -78,9 +78,23 @@ async function runPipelineFixture(fixture) {
         const start=itemRecords.find(r=>r.endpoint.endsWith('/Playing'));
         const progress=itemRecords.filter(r=>r.endpoint.endsWith('/Progress'));
         const stop=itemRecords.find(r=>r.endpoint.endsWith('/Stopped'));
+        const expectedMount = typeof mountSidecar === 'string' && /\.strm$/i.test(mountSidecar)
+            ? mountSidecar.slice(0, -5)
+            : null;
+        const sourceUsed = embedded.currentSrc();
+        let mountCandidateExists = !expectedMount;
+        if (expectedMount) {
+            try {
+                mountCandidateExists = !!(window.fs && typeof window.fs.existsSync === 'function' && window.fs.existsSync(expectedMount));
+            } catch (error) {
+                mountCandidateExists = false;
+            }
+        }
         results.push({kind,playerId:player.id,paused,sought,resumed,
             itemSidecarPreserved:state.NowPlayingItem.Path===activeItem.Path,
             sourcePreserved:state.MediaSource.Path===fixture,
+            mountSourceUsed:(kind==='strm' && mountSidecar) ? sourceUsed===expectedMount : sourceUsed===fixture,
+            mountCandidateExists:mountCandidateExists,
             sessionPreserved:!!start && !!stop && itemRecords.every(r=>r.body.PlaySessionId==='play-'+activeItem.Id && r.body.MediaSourceId==='source-'+activeItem.Id),
             hasStart:!!start,hasProgress:progress.length>0,hasStop:!!stop,
             pauseReported:progress.some(r=>r.body.IsPaused===true),

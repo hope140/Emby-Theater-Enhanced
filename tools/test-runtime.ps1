@@ -1,4 +1,4 @@
-param([string]$RuntimeName = 'EmbyTheaterEnhanced-win-x64', [switch]$TestMedia, [switch]$Visible, [switch]$TestPipeline)
+param([string]$RuntimeName = 'EmbyTheaterEnhanced-win-x64', [switch]$TestMedia, [switch]$Visible, [switch]$TestPipeline, [switch]$TestMount)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if ($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid runtime name.' }
@@ -21,6 +21,11 @@ if ($TestMedia -or $TestPipeline) {
     & node (Join-Path $PSScriptRoot 'make-fixture.cjs') $fixture
     if ($LASTEXITCODE -ne 0) { throw 'Fixture generation failed.' }
     $info.EnvironmentVariables['ETE_TEST_MEDIA'] = $fixture
+    if ($TestMount) {
+        $mountSidecar = Join-Path $evidence 'fixture.y4m.strm'
+        [IO.File]::WriteAllText($mountSidecar, "fixture mount test`n")
+        $info.EnvironmentVariables['ETE_TEST_MOUNT_SIDECAR'] = $mountSidecar
+    }
     New-Item -ItemType Directory -Path (Join-Path $evidence 'appdata/mpv') -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $evidence 'appdata/mpv/mpv.conf'), "scale=bilinear`nsub-font=ETE-CONFIG-PROBE`nvo=gpu-next`ngpu-context=d3d11`nhwdec=no`ndemuxer-max-bytes=3072MiB`n")
     # mpv uses Windows Known Folders, not the APPDATA environment override.

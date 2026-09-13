@@ -59,7 +59,7 @@ app.on('browser-window-created', (_, win) => {
                 if (!screenshot.isEmpty()) fs.writeFileSync(path.join(evidence, 'startup.png'), screenshot.toPNG());
                 if (process.env.ETE_TEST_PIPELINE) {
                     const source = fs.readFileSync(path.join(__dirname,'../tests/pipeline-browser.js'),'utf8');
-                    state.pipeline = await win.webContents.executeJavaScript(source + '\nrunPipelineFixture(' + JSON.stringify(fixtureUrl) + ')');
+                    state.pipeline = await win.webContents.executeJavaScript(source + '\nrunPipelineFixture(' + JSON.stringify(fixtureUrl) + ', ' + JSON.stringify(process.env.ETE_TEST_MOUNT_SIDECAR || null) + ')');
                     if (!Object.values(state.pipeline.next).every(Boolean) || !state.pipeline.results.every(result => result.playerId==='libmpvmediaplayer' && Object.entries(result).filter(([k])=>!['kind','playerId'].includes(k)).every(([,v])=>v===true))) {
                         return finish({ok:false,error:'Playback pipeline assertion failed',state});
                     }
