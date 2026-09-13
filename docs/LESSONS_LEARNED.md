@@ -12,3 +12,11 @@
 10. 本地 PlaybackManager fixture 需要提供完整 endpoint 能力；将 HTTP 源错误标为不受支持的 remote 会走 DirectStream 并请求错误的模拟 URL。修正 fixture 后 DirectPlay、消息分派与上报集成通过；未改变产品能力判断。
 11. GitHub 上显示 GPL-2.0 的仓库及其 GPL v2 文本本身不足以证明 “or later”；只有明确的版权/许可通知才能扩大该授权。公开派生维护层应保守使用 GPL-2.0-only，并将来源未确认资产留在版本控制之外。
 12. 播放与 Session 的当前验收状态必须集中以 `LIVE_ACCEPTANCE.md` 为准；静态审计文档只能描述其证据边界，不能保留与真实验收冲突的旧结论。
+13. Alameda 为 `file://` 模块加载相对依赖时不会可靠地为带协议的模块 ID 补 `.js`；新增相对 AMD 依赖应显式写扩展名，并用隔离 runtime 验证实际插件注册。
+14. renderer 侧现有安全边界只通过 preload 暴露 `window.fs`，Mount 检查应使用同步 `existsSync` 和有限路径规则，不应引入服务器请求、递归扫描或不确定映射。
+15. `embedded.play` 收到的 `options.url` 必须继续是 PlaybackManager 形成的 native source；验证换源结果应检查插件的 `currentSrc` 或最终 `loadfile`，不能把原始播放上下文误当成已替换 source。
+16. Electron runtime 夹具必须串行启动并单独核对进程；UI 启动超时、插件加载失败和实际媒体播放失败要分别记录，不能用其中一项替代另外两项证据。
+17. Resolver 的规则优先级必须在每条规则完成候选生成后立即检查存在性；低优先级 URL 解析失败不能回溯覆盖已经命中的 sidecar 或本地 sourcePath。
+18. 文件扩展名是播放安全边界的一部分；第一版应维护明确的音视频 allowlist，接受少量漏命中，避免把 `.txt`、`.nfo`、图片等文件交给播放器。
+19. 真实 smoke 应把 sourcePath 形态、实际 PlayMethod 和最终 source 类型分开记录；当前服务器没有自然 Mount 映射时，必须明确记录 real Emby Mount hit pending，并把 native fallback 作为独立通过项。
+20. 真实验收只需在隔离输出中保留脱敏的状态枚举和报告计数；服务器地址、账号、认证材料、媒体路径与 Item 标识不应进入仓库或公开 evidence。

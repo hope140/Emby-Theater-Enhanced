@@ -29,7 +29,7 @@ app.on('browser-window-created',(_,created)=>{
             try{
                 await new Promise(r=>setTimeout(r,7000));
                 await evaluate(fs.readFileSync(path.join(__dirname,'../tests/live-acceptance-browser.js'),'utf8')+'\nvoid 0;');
-                const methods=process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
+                const methods=process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_SELECT_ONLY?['inspect','select']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
                 for(const method of methods){
                     report.currentStage=method;save();
                     const result=await evaluate('window.eteAcceptance.'+method+'()');

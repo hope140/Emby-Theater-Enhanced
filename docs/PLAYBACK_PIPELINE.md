@@ -10,15 +10,16 @@
 4. `createStreamInfo`（约 1195 行）形成最终 url。DirectPlay 取 MediaSource.Path，DirectStream 取服务器流 URL，Transcode 取 TranscodingUrl；同时保留 item、mediaSource、playSessionId、playMethod 与起始 offset。
 5. 初次播放约 1149 行执行 `player.play(streamInfo)`，成功后 `onPlaybackStarted`；换流走 `setSrcIntoPlayer`（约 513 行），仍保留旧会话结束与进度逻辑。
 6. `plugins/libmpv.js` 的 `self.play` → `createMediaElement` 创建 `<embed type="application/x-mpvjs">`，收到 ready 后 `playInternal(options)` 读取 options.url 和 options.mediaSource。
-7. `playInternal` 设置 Emby 播放属性，随后 `sendCommand(['loadfile', url])`，通过 embed.postMessage 交给 Pepper bridge 和同目录 mpv-1.dll。
+7. `playInternal` 将 `Item.Path`、`MediaSource.Path` 和原始 `options.url` 分别保存为 `sidecarPath`、`sourcePath` 和 `nativeSource`，调用 STRM Mount Resolver。Resolver 只返回 `{type: 'native'|'local', source: '...', reason: '...'}`，不修改 `options` 或播放上下文。
+8. Resolver 完成后设置插件内部 `currentSrc`，再设置 Emby 播放属性并执行 `sendCommand(['loadfile', resolvedSource])`，通过 embed.postMessage 交给 Pepper bridge 和同目录 mpv-1.dll。
 
-## 未来 Resolver 插入位置
+## Resolver 插入位置
 
-建议在 `plugins/libmpv.js` 的 `playInternal(options)` 中，读取 `options.url` 后、设置 `currentSrc` 和发出 loadfile 前。只在明确 STRM 且原生上下文已可用时评估增强；普通媒体保持原路径。保留原始 `options.item`、`options.mediaSource`、`options.playSessionId`、字幕和播放上报字段。
+当前实现位于 `plugins/libmpv.js` 的 `playInternal(options)` 中，读取 `options.url` 后、设置 `currentSrc` 和发出 `loadfile` 前。只在明确 STRM 且原生上下文可用时评估增强；普通媒体保持原路径。原始 `options.item`、`options.mediaSource`、`options.playSessionId`、字幕和播放上报字段均保留。
 
-未来结果可使用 `{type: 'native'|'local'|'url', source: '...'}`。输入同时保存 `sidecarPath=Item.Path`、`sourcePath=MediaSource.Path`、`nativeSource=options.url`。失败必须返回 nativeSource。第一轮尚未添加 Resolver 模块。
+当前结果只产生 `native` 或 `local`；`url` 为未来 CD2 预留。任何失败都返回 `nativeSource`。Resolver 是同步本地检查，不发网络请求、不扫描目录、不创建 Session，也不自行 seek。
 
-这是候选插入点，不是已经验证的 Resolver 契约。后续必须分别验证 DirectPlay、DirectStream、Transcode 的起始 offset、音字幕流索引、请求头、鉴权与换流重入。尤其不能在收到转码流上下文时只换成原文件而继续沿用转码 offset；需要限定适用条件。
+DirectPlay 和 DirectStream 允许在确定性 Mount 命中时替换 source；Transcode 始终保留 native source。起始 offset、音字幕流索引、请求头、鉴权和换流重入仍由原 PlaybackManager/libmpv 生命周期处理，Resolver 不主动重写这些字段。当前已有单元测试和隔离 runtime 夹具验证，真实 Emby Mount 样本仍待用户实机验收。
 
 ## 选择与边界
 

@@ -4,6 +4,12 @@ window.eteAcceptance = (function(){
     const reports=[];
     let authorizedPlayback=false;
     function wait(ms){return new Promise(r=>setTimeout(r,ms));}
+    function sourceKind(source){
+        if(typeof source!=='string' || !source)return 'missing';
+        if(/^[A-Za-z]:[\\/]/.test(source) || /^\\\\/.test(source) || /^\/\/[^\/]/.test(source))return 'local';
+        if(/^https?:\/\//i.test(source))return 'url';
+        return 'other';
+    }
     async function until(fn,limit=15000){
         const start=Date.now();
         while(Date.now()-start<limit){const value=await fn();if(value)return value;await wait(700);}
@@ -16,7 +22,8 @@ window.eteAcceptance = (function(){
         return {player:p.id,item:s.NowPlayingItem&&s.NowPlayingItem.Id,
             ticks:s.PlayState.PositionTicks,paused:s.PlayState.IsPaused,
             playSession:s.PlayState.PlaySessionId,source:s.PlayState.MediaSourceId,
-            playMethod:s.PlayState.PlayMethod};
+            playMethod:s.PlayState.PlayMethod,
+            sourceKind:sourceKind(p.currentSrc&&p.currentSrc())};
     }
     async function ownSession(){
         const all=await api.getSessions({DeviceId:api.deviceId()});
@@ -70,7 +77,7 @@ window.eteAcceptance = (function(){
                 Fields:'Path,MediaSources',SortBy:'DateCreated',SortOrder:'Descending',Filters:'IsUnplayed'});
             items=result.Items.filter(item=>typeof item.Path==='string'&&item.Path.toLowerCase().endsWith('.strm')&&item.RunTimeTicks>1200000000).slice(0,2);
             if(items.length<2)return {ok:false,reason:'not-enough-strm-samples',scanned:result.Items.length};
-            return {ok:true,scanned:result.Items.length,samples:items.map(i=>({id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,sourceCount:i.MediaSources&&i.MediaSources.length}))};
+            return {ok:true,scanned:result.Items.length,samples:items.map(i=>{const source=(i.MediaSources||[])[0]||{};return {id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,sourceCount:i.MediaSources&&i.MediaSources.length,sourcePathKind:sourceKind(source.Path),container:String(source.Container||'').toLowerCase()||'missing'};})};
         },
         async play(){
             authorizedPlayback=true;

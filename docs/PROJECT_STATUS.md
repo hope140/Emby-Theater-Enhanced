@@ -1,12 +1,12 @@
 # 项目状态
 
-更新时间 2026-09-13（UTC+8）。**第一轮开发与运行验收已按用户当前确认口径完成：真实 STRM、Session、后台控制链通过。库内普通文件无样本；仅含已审计内容的本地公开 Git 基线已建立，当前运行验收以 `docs/LIVE_ACCEPTANCE.md` 为唯一真相。**
+更新时间 2026-09-13（UTC+8）。**第一轮真实 STRM、Session、后台控制链已通过；本轮 `feat/strm-mount-resolver` 已完成最小确定性 Mount Resolver 的实现、单测和隔离 runtime 验证。真实 Emby 服务器上的 Mount 命中仍待实机验收；当前真实播放证据仍以 `docs/LIVE_ACCEPTANCE.md` 为唯一真相。**
 
 ## 接手摘要
 
 - Baseline：用户提供的 Carnival 3.0（应用 3.0.20-3.0）+ 综合补丁最终 ZIP。
 - Enhanced：0.1.1 开发候选；Windows host 文件版本保持 3.0.20.0，Electron 应用构建版本为 0.1.1。
-- Git：本地 Git baseline 完成（`main` / `v0.1.1-baseline`）；首次公开审核清理已完成，已同步到 GitHub `origin/main` 与同名标签；未创建 Release。首个提交仅纳入已审计的维护文件，未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
+- Git：本地 Git baseline 完成（`main` / `v0.1.1-baseline`）；首次公开审核清理已完成并同步到 GitHub `origin/main` 与同名标签；未创建 Release。当前工作分支为 `feat/strm-mount-resolver`，本轮实现与测试提交已创建，推送和 PR 审核状态以最终交接为准。未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
 - 源码：`src/electronapp`；原件在根目录，解包输入在 `vendor/carnival` 与 `vendor/patch`。
 - 交付：`dist/EmbyTheaterEnhanced-0.1.1-final-win-x64/Start-Enhanced.cmd`；`dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe`。旧 0.1.0 产物保留。
 - 工具：`tools/prepare.ps1`、`build.ps1`、`package.ps1`、`test-runtime.ps1`、`test-host.ps1`。
@@ -15,7 +15,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 工程目录和知识库 | 完成；公开 Git baseline 已推送，等待下一阶段任务规格 |
+| 工程目录和知识库 | 完成；公开 Git baseline 已推送，本轮 Mount Resolver 在功能分支开发 |
 | Carnival 分类与 vendor 清单 | 完成；E 类 815 文件精确上游来源未确认 |
 | 可重复 runtime 构建 | 通过，重复输出 1013 文件 SHA256 一致 |
 | 原 Windows host 启动 | 测试副本通过；host+4 Electron 进程、诊断日志 |
@@ -25,7 +25,7 @@
 | 原生普通媒体 / STRM | 真实 STRM 两集通过，走原生 DirectStream；普通文件仅本地/模拟验证，库内无样本 |
 | Session / Remote Control | 非管理员账号下，真实服务器接受命令、WebSocket 送达、播放器响应及服务端状态回读全部通过 |
 | WatchTogether | 按用户确认的后台控制正常口径通过；未宣称插件双客户端同步精度已测试 |
-| 未来 Resolver 插入点 | 已定位 libmpv.js playInternal 的 source 形成处；仍需验证换流/转码语义 |
+| STRM Mount Resolver | 已实现 Detection、Mount → Native contract、确定性优先级、媒体扩展 allowlist、Transcode protection 和安全诊断；Node 19/19、隔离 runtime 命中通过；真实 native fallback 通过，real Emby Mount hit pending |
 | External Player | 已禁用入口并测试；保留旧实现 |
 | 环境诊断 | 实际 Electron/Chrome/Node、DLL API/version、ready/playing 已取得 |
 | mpv.conf / GPU / HDR | 配置规则/隔离通过；真实样本 gpu-next、d3d11va 硬解及缓存 3221225472 字节已取得；HDR/画质效果不是本次样本覆盖范围 |
@@ -41,18 +41,20 @@ Electron **18.3.15**；Chromium **100.0.4896.160**；Node **16.13.2**；mpv **v0
 3. 隐藏窗口媒体测试超时；原始并行 UI/host 测试也出现一次启动超时，后续串行通过。媒体测试使用可见窗口并顺序执行。内存 API fixture 只证明客户端逻辑，不具有真实服务器 Session/网络的证明力。
 4. 815 个 E 类文件的精确官方来源，以及 Carnival EXE/bridge 的精确可复现构建来源仍不明；它们不在首次公开提交中。
 5. 实际安装使用用户授权的独立 E 盘目录且当前进程已提权；安装/覆盖/启动/卸载均通过，但未展示 UAC 交互，也没有单独验证 Program Files ACL。尚未正式发布。
+6. Mount Resolver 已完成静态、单元和隔离 runtime 验证；真实 Emby smoke 的 native fallback 与控制链通过，但当前路径条件没有自然 Mount 命中，real Emby Mount hit pending；不同编码、字幕/音轨差异和长时间稳定性尚未验证。
 
 ## 当前阻塞项与下一步
 
 用户已登录非管理员账号，明确允许选择任意影视测试，并确认全库为 STRM、WatchTogether 以后台控制正常为准。两个不同 STRM 样本的真实 DirectStream 播放、进度、Pause/Seek/Unpause/NextTrack/Stop 全部通过。每个样本的 Item/MediaSource/PlaySession 关联一致，停止报告均被服务器接受；画面已实际检查。测试会留下样本正常观看进度，未额外重置用户数据。
 
-本轮没有运行时产品代码变更，0.1.1 产物保持原哈希。验收脚本初次误用包名导致 HTTP/WS Session 身份分裂，已改为真实 productName 并重新通过；此问题不归为产品缺陷。公开 baseline 已推送；下一阶段在用户提供 Mount 任务规格后开始。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
+本轮新增 `src/electronapp/resolvers/strm-resolver.js` 与 `mount-resolver.js`，在 `libmpv.playInternal` 的最终 `loadfile` 前执行 source replacement；PlaybackManager、Session、PlaySessionId、MediaSource、字幕/音轨索引和 offset 流程未改写。隔离 fixture 的普通媒体、无 Mount STRM fallback、Mount 命中、Pause/Seek/Unpause/Stop/NextTrack 和 20 条模拟上报均通过。真实 Emby smoke 选取 2 个 STRM 样本，当前 `MediaSource.Path` 为不可解析的 other 形态，实际 DirectStream 保持 URL native source；全控制链和 10 条报告通过，real Emby Mount hit pending。没有修改服务器配置或测试数据。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
 
 ## 推荐继续入口
 
 - `docs/TESTING.md`：验证命令和真实测试卡。
 - `docs/LIBMPV_RUNTIME.md`：缓存负数、配置来源与 GPU 属性。
 - `src/electronapp/plugins/libmpv.js`：self.play、playInternal、message、getProperty。
+- `src/electronapp/resolvers/strm-resolver.js` / `mount-resolver.js`：STRM 判定、路径推导、native fallback。
 - `src/electronapp/www/modules/common/playback/playbackmanager.js`：getPlaybackInfo、createStreamInfo、setSrcIntoPlayer、onPlaybackStarted。
 - `src/electronapp/www/modules/common/input/api.js`：WebSocket 消息分派。
 - `docs/DEVELOPMENT_LOG.md` / `docs/evidence/first-round-followup.json`：本次执行记录与可携带证据摘要；first-round.json 保留初次结果。
