@@ -1,8 +1,18 @@
-define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter', 'appSettings', 'userSettings', 'require', 'connectionManager'], function (globalize, playbackManager, pluginManager, events, embyRouter, appSettings, userSettings, require, connectionManager) {
+define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter', 'appSettings', 'userSettings', 'require', 'connectionManager', '../resolvers/strm-resolver.js'], function (globalize, playbackManager, pluginManager, events, embyRouter, appSettings, userSettings, require, connectionManager, strmResolver) {
     'use strict';
 
     function getTextTrackUrl(subtitleStream, serverId) {
         return playbackManager.getSubtitleUrl(subtitleStream, serverId);
+    }
+
+    function logStrmResolverResult(result) {
+        var type = result && result.type ? result.type : 'native';
+        var reason = result && result.reason ? result.reason : 'native_fallback';
+        var isStrm = result && result.isStrm === true ? 'yes' : 'no';
+        var localExists = result && result.localExists === true ? 'yes' : 'no';
+        var fallback = type === 'native' ? 'yes' : 'no';
+
+        console.log('STRM resolver: invoked isStrm=' + isStrm + ' type=' + type + ' reason=' + reason + ' localExists=' + localExists + ' fallback=' + fallback);
     }
 
     function toDecimal(val) {
@@ -511,7 +521,37 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
             var item = options.item;
             mediaSource = options.mediaSource;
 
-            var url = options.url;
+            var nativeSource = options.url;
+            var url = nativeSource;
+            var resolverResult;
+
+            try {
+                resolverResult = strmResolver.resolve({
+                    item: item,
+                    mediaSource: mediaSource,
+                    sidecarPath: item && item.Path,
+                    sourcePath: mediaSource && mediaSource.Path,
+                    nativeSource: nativeSource,
+                    playMethod: options.playMethod,
+                    streamInfo: options
+                }, {
+                    fs: typeof window !== 'undefined' ? window.fs : null
+                });
+            } catch (err) {
+                resolverResult = {
+                    type: 'native',
+                    source: nativeSource,
+                    reason: 'native_fallback',
+                    isStrm: false,
+                    localExists: false,
+                    fallback: true
+                };
+            }
+
+            if (resolverResult && typeof resolverResult.source === 'string') {
+                url = resolverResult.source;
+            }
+            logStrmResolverResult(resolverResult);
 
             currentSrc = url;
             currentAspectRatio = 'auto'
