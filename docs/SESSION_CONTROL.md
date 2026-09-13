@@ -40,6 +40,8 @@ GeneralCommand 同样经该模块进入命令分派，DisplayMessage 进入 toas
 
 EmbyWatchTogether 兼容性的必要条件是身份、Item、PlaySession、WebSocket、Pause/Seek/Stop 与 PositionTicks 连续一致。Resolver 仅替换交给内嵌播放器的 source，不创建第二播放器、不自行伪造上报或 Session。2026-09-13 的真实验收已证明后台控制链正常；双客户端同步精度尚未测试，当前状态以 `docs/LIVE_ACCEPTANCE.md` 为准。
 
+当前 Mount Resolver 在 `libmpv.playInternal` 内同步执行，成功时只改变 Embedded libmpv 的最终 `loadfile` source。隔离 PlaybackManager 夹具已验证 Mount 命中时 Item.Path、MediaSource.Path、PlaySessionId、播放上报和 Pause/Seek/Unpause/Stop/NextTrack 仍保持原链路；这项证据不等同于真实服务器上的 Mount 样本验收。
+
 ## 待验收
 
 0.1.1 已新增客户端集成验证：真实 PlaybackManager 与 ApiClient 报告序列化处理普通视频和 STRM fixture，真实 input/api.js 消息分派触发 Pause/Unpause/Seek/Stop/NextTrack。报告保留 ItemId、MediaSourceId、PlaySessionId，开始/进度/结束均存在，Next 正常换项。API 回应、报告递送和消息投递均为内存 fixture，因此不将该结果写成真实服务器 Session 或真实 WebSocket 已通过。

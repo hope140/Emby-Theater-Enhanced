@@ -7,7 +7,9 @@
 | Windows First | 先稳定当前 Windows/Carnival 的 native 依赖与部署布局 |
 | Emby Only | 保留原客户端身份、PlaybackInfo 与控制协议 |
 | Embedded libmpv Only | 正式视频能力集中在内嵌播放器，外置入口先禁用后验收 |
-| STRM Only Enhancement | 普通媒体保留基线行为；第一轮不实现 Resolver |
+| STRM Only Enhancement | 普通媒体保留基线行为；当前仅对明确 STRM 尝试 Mount，失败回 native |
+| Deterministic Mount Before Native | 只尝试 sidecar stem、明确本地 sourcePath、URL pathname 文件名及 `name`/`filename`/`file_name`；必须通过本地存在检查，不做模糊映射或扫描 |
+| Transcode Protection | Transcode 上下文不替换 source，优先保持 PlaybackManager 已选择的播放语义 |
 | Native Always Fallback | 后续增强失败时返回本次原生 source |
 | Resolver Changes Source Only | 不重建身份、不绕过 PlaybackManager、不另起播放会话 |
 | Preserve Emby Session | 进度、WebSocket、远控、队列及 EmbyWatchTogether 是必要验收条件 |
