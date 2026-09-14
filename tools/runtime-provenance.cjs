@@ -126,10 +126,16 @@ function buildPreparedArtifactEntries(root, runtime) {
         }
         const baseText = fs.readFileSync(baseFile, 'utf8');
         const expectedText = preloadPreparation.buildPreparedPreload(baseText);
-        const expectedSha256 = preloadPreparation.sha256(Buffer.from(expectedText, 'utf8'));
+        const baseSha256 = hashFile(baseFile);
+        const generatorSha256 = hashFile(generatorFile);
         const preparedSha256 = hashFile(preparedFile);
-        if (preparedSha256 !== expectedSha256) {
+        const runtimeSha256 = hashFile(runtimeFile);
+        const expectedPreparedSha256 = preloadPreparation.sha256(Buffer.from(expectedText, 'utf8'));
+        if (preparedSha256 !== expectedPreparedSha256) {
             throw new Error('Prepared artifact hash mismatch: ' + contract.preparedPath);
+        }
+        if (runtimeSha256 !== preparedSha256) {
+            throw new Error('Prepared artifact runtime mismatch: ' + contract.preparedPath + ' -> ' + contract.runtimePath);
         }
         return {
             preparedPath: contract.preparedPath,
@@ -137,10 +143,11 @@ function buildPreparedArtifactEntries(root, runtime) {
             runtimePath: contract.runtimePath,
             generatorPath: contract.generatorPath,
             category: contract.category,
-            baseSha256: hashFile(baseFile),
-            generatorSha256: hashFile(generatorFile),
+            baseSha256: baseSha256,
+            generatorSha256: generatorSha256,
+            expectedPreparedSha256: expectedPreparedSha256,
             preparedSha256: preparedSha256,
-            runtimeSha256: hashFile(runtimeFile)
+            runtimeSha256: runtimeSha256
         };
     });
 }
@@ -265,14 +272,15 @@ function validatePreparedArtifacts(root, runtime, manifest, errors) {
     try {
         expected = buildPreparedArtifactEntries(root, runtime);
     } catch (error) {
-        errors.push('prepared-artifact-input-missing');
+        errors.push(String(error && error.message || '').indexOf('Prepared artifact runtime mismatch:') === 0
+            ? 'prepared-artifact-runtime-mismatch' : 'prepared-artifact-input-missing');
         return [];
     }
     const actual = manifest && Array.isArray(manifest.preparedArtifacts) ? manifest.preparedArtifacts : [];
     if (actual.length !== expected.length) errors.push('prepared-artifact-contract-mismatch');
     return expected.map((expectedEntry, index) => {
         const entry = actual[index] || {};
-        const fields = ['preparedPath', 'basePath', 'runtimePath', 'generatorPath', 'category', 'baseSha256', 'generatorSha256', 'preparedSha256', 'runtimeSha256'];
+        const fields = ['preparedPath', 'basePath', 'runtimePath', 'generatorPath', 'category', 'baseSha256', 'generatorSha256', 'expectedPreparedSha256', 'preparedSha256', 'runtimeSha256'];
         const matches = fields.every(field => entry[field] === expectedEntry[field]);
         if (!matches) errors.push('prepared-artifact-mismatch:' + expectedEntry.preparedPath);
         return Object.assign({}, entry, {valid: matches});

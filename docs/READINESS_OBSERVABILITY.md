@@ -67,7 +67,7 @@ residual: 0
 ## 修复策略
 
 1. `tools/prepare-preload.cjs` 从只读 vendor preload 生成 ignored prepared preload。生成内容保留原 IPC/fs/os/appdata bridge，增加已有 diagnostics bridge，并在 `window.__etePepperReadiness` 中保留带 `runId`、时间戳和 bridge identity 的 ready/playing sticky state。
-2. `prepare.ps1`、`build.ps1` 共用该生成器；runtime provenance 单独记录并校验 vendor base、generator、prepared source 和 runtime 四个 hash，避免旧 dist 或手工 preload 混入。
+2. `prepare.ps1`、`build.ps1` 共用该生成器；runtime provenance 单独记录并校验 vendor base、generator、prepared source 和 runtime hash，并强制 `runtime preload === deterministic prepared preload`，避免旧 dist 或手工 preload 混入。
 3. acceptance observer 在 embed attach 后和每次 poll 查询 sticky/current state，同时观察 raw embed ready、direct diagnostics wrapper、window `core-playing`、`core-idle=false` 和视频 PositionTicks 推进。`beginRun(runId)` 会清理 run-scoped 状态；旧 run 的 `runId`、时间戳或 bridge 不匹配时不能污染新 run。
 4. live flow 不再把 direct marker 缺失立即当作 Pepper failure。它先等待 bounded `manager.play` 结果，再收集 core-playing、视频进度、Session NowPlaying 和已接受 playback report。只有完整 alternate evidence 才进入 class B；单独的 `play-called` 绝不算 ready。
 5. loadfile outgoing command 仍如实记为 `unavailable`，因为 Pepper 对象的 `postMessage` hook 在真实 runtime 不可可靠替换；没有用 manager resolved 或其它信号伪造 loadfile。

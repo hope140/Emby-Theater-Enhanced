@@ -59,7 +59,7 @@ fresh worktree 没有该文件，因此在测试体开始前以 `ENOENT` 失败�
 |---|---|---|
 | `vendor/carnival/electronapp/preload.js` | C — vendor-derived source | 只读 Carnival baseline，prepare 后由 archive hash 和 vendor manifest 校验 |
 | `src/electronapp/preload.js` | D — prepared workspace artifact | 由 `tools/prepare-preload.cjs` 用 vendor preload 加 tracked diagnostics/sticky block 生成；继续 ignored，禁止手工复制 |
-| runtime `electronapp/preload.js` | E — runtime-only assembled artifact | build 从 prepared artifact 复制，并由 provenance 同时校验 base/generator/prepared/runtime hash |
+| runtime `electronapp/preload.js` | E — runtime-only assembled artifact | build 从 prepared artifact 复制，并由 provenance 校验 base/generator/prepared/runtime hash，且强制 runtime preload hash 等于 deterministic prepared preload hash |
 | `src/electronapp/www/**` | C — vendor-derived source | fresh source 可缺失；build 从 vendor 得到，`app.js` 和 PlaybackManager 是显式 build overlay |
 | `src/electronapp/package.json` | C — vendor-derived source | fresh source 可缺失；build 从 vendor 得到并写入受控 package metadata overlay |
 | `src/electronapp/scripts/windowsync.js`、`mpvplayer/strings/en-US.json`、`zh-CN.json` | C — vendor-derived source | manifest 中有对应 vendor 文件，当前没有测试/构建依赖的无来源本地变体 |
@@ -92,7 +92,7 @@ node tools/runtime-provenance.cjs validate . dist/EmbyTheaterEnhanced-cleanroom 
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -RuntimeName EmbyTheaterEnhanced-cleanroom -VerifyOnly
 ```
 
-`prepare.ps1` 和 `build.ps1` 都调用同一个 `prepare-preload.cjs`。生成器是幂等的；vendor base、prepared artifact 和 runtime provenance 不匹配时 fail closed。测试仍然要求该 contract 已完成，不会在缺失 required preload 时 skip。
+`prepare.ps1` 和 `build.ps1` 都调用同一个 `prepare-preload.cjs`。生成器是幂等的；provenance 会分别计算 vendor base、generator、prepared、runtime 和 `expectedPreparedSha256`，并强制 `runtimeSha256 === preparedSha256 === expectedPreparedSha256`，不匹配时 fail closed 且只验证、不修改产物。测试仍然要求该 contract 已完成，不会在缺失 required preload 时 skip。
 
 ## 两次独立验证
 

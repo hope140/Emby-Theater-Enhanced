@@ -55,11 +55,15 @@ function createRuntime(root, name) {
 }
 
 function runProvenance(command, root, runtime) {
-    const result = childProcess.spawnSync(process.execPath, [tool, command, root, runtime, sourceCommit], {
-        encoding: 'utf8'
-    });
+    const result = runProvenanceRaw(command, root, runtime);
     assert.equal(result.error, undefined, result.error && result.error.message);
     return {exitCode: result.status, report: JSON.parse(result.stdout)};
+}
+
+function runProvenanceRaw(command, root, runtime) {
+    return childProcess.spawnSync(process.execPath, [tool, command, root, runtime, sourceCommit], {
+        encoding: 'utf8'
+    });
 }
 
 test('runtime provenance excludes the exact legacy subtree without weakening normal coverage', () => {
@@ -108,11 +112,22 @@ test('runtime provenance excludes the exact legacy subtree without weakening nor
     }
 });
 
-test('runtime provenance validates the app overlay with vendor fallback when source app.js is absent', () => {
+test('runtime provenance rejects a prewrite runtime preload mismatch and preserves vendor fallback overlay', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ete-provenance-fallback-'));
     try {
         createFixture(root);
         fs.rmSync(path.join(root, 'src', 'electronapp', 'www', 'app.js'));
+
+        const prewriteRuntime = createRuntime(root, 'runtime-prewrite-tamper');
+        const preparedPath = path.join(root, 'src', 'electronapp', 'preload.js');
+        const runtimePreloadPath = path.join(prewriteRuntime, 'electronapp', 'preload.js');
+        assert.equal(fs.readFileSync(preparedPath, 'utf8'), fs.readFileSync(runtimePreloadPath, 'utf8'));
+        fs.appendFileSync(runtimePreloadPath, '\r\n// runtime tamper before provenance write\r\n', 'utf8');
+        const prewriteTamper = runProvenanceRaw('write', root, prewriteRuntime);
+        assert.equal(prewriteTamper.status, 1);
+        assert.match(prewriteTamper.stderr, /Prepared artifact runtime mismatch: src\/electronapp\/preload\.js -> electronapp\/preload\.js/);
+        assert.equal(fs.existsSync(path.join(prewriteRuntime, 'runtime-provenance.json')), false);
+
         const runtime = createRuntime(root, 'runtime-vendor-fallback');
         const written = runProvenance('write', root, runtime);
         assert.equal(written.exitCode, 0);
@@ -122,6 +137,7 @@ test('runtime provenance validates the app overlay with vendor fallback when sou
         assert.equal(appOverlay.sourceSha256, null);
         const prepared = manifest.preparedArtifacts.find(entry => entry.preparedPath === 'src/electronapp/preload.js');
         assert.equal(prepared.category, 'prepared-workspace-artifact');
+        assert.equal(prepared.expectedPreparedSha256, prepared.preparedSha256);
         assert.equal(prepared.preparedSha256, prepared.runtimeSha256);
         assert.equal(runProvenance('validate', root, runtime).exitCode, 0);
 
