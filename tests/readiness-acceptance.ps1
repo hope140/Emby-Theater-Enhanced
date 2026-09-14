@@ -6,7 +6,8 @@ param(
     [switch]$AuthorizedLivePlayback,
     [switch]$ValidationOnly,
     [switch]$Synthetic,
-    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch')]
+    [switch]$SyntheticCimUnavailable,
+    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch', 'cim-unavailable')]
     [string]$SyntheticResult = 'timeout'
 )
 
@@ -17,6 +18,7 @@ if ($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid runt
 if ($RunPrefix -notmatch '^[A-Za-z0-9._-]+$') { throw 'Invalid run prefix.' }
 if ($Methods -and $Methods -notmatch '^[A-Za-z]+(?:,[A-Za-z]+)*$') { throw 'Methods must be a comma-separated method list.' }
 if ($TimeoutMs -lt 250 -or $TimeoutMs -gt 900000) { throw 'TimeoutMs must be between 250 and 900000.' }
+if ($SyntheticCimUnavailable -and -not $Synthetic) { throw 'SyntheticCimUnavailable requires Synthetic.' }
 if (-not $Synthetic -and -not $ValidationOnly -and -not $AuthorizedLivePlayback) { throw 'Explicit live playback authorization is required.' }
 
 $runtime = Join-Path $root ('dist\' + $RuntimeName)
@@ -40,6 +42,9 @@ $terminalObservedElapsedMs = $null
 $startError = $null
 $ownershipInspection = 'unavailable'
 $ownershipIssues = New-Object 'System.Collections.Generic.HashSet[string]'
+$cimUnavailable = $false
+$cleanupStatus = 'not-started'
+$ownershipVerified = $false
 $ownedPids = New-Object 'System.Collections.Generic.HashSet[int]'
 $ownedRecords = @{}
 $stdoutTask = $null
@@ -109,7 +114,10 @@ if (-not $Synthetic -and -not $ValidationOnly -and $runtimeValidation.status -ne
         stdoutPresent = $true
         stderrPresent = $true
         ownershipInspection = 'not-started'
-        residualOwnedProcesses = 0
+        cleanupStatus = 'not-started'
+        ownershipVerified = $false
+        residualOwnedProcesses = $null
+        residualOwnedProcessesKnown = $false
         residualOwnedPids = @()
         cleanup = 'not-started'
         output = $output
@@ -143,7 +151,10 @@ if ($ValidationOnly) {
         stderrPresent = $true
         ownershipInspection = 'not-started'
         ownershipIssues = @()
-        residualOwnedProcesses = 0
+        cleanupStatus = 'not-started'
+        ownershipVerified = $false
+        residualOwnedProcesses = $null
+        residualOwnedProcessesKnown = $false
         residualOwnedPids = @()
         cleanup = 'not-started'
         output = $output
@@ -156,6 +167,12 @@ if ($ValidationOnly) {
 }
 
 function Get-ProcessSnapshot {
+    if ($SyntheticCimUnavailable) {
+        $script:cimUnavailable = $true
+        $script:ownershipInspection = 'unavailable'
+        Add-OwnershipIssue 'cim-unavailable'
+        return $null
+    }
     try {
         return @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop | ForEach-Object {
             [pscustomobject]@{
@@ -166,7 +183,10 @@ function Get-ProcessSnapshot {
             }
         })
     } catch {
-        return @()
+        $script:cimUnavailable = $true
+        $script:ownershipInspection = 'unavailable'
+        Add-OwnershipIssue 'cim-unavailable'
+        return $null
     }
 }
 
@@ -189,7 +209,7 @@ function Get-OwnedTree([object[]]$snapshot, [int]$ownerPid) {
 function Observe-OwnedTree {
     if ($null -eq $rootPid) { return }
     $snapshot = Get-ProcessSnapshot
-    if ($snapshot.Count -eq 0) { return }
+    if ($null -eq $snapshot) { return }
     $tree = Get-OwnedTree -snapshot $snapshot -ownerPid $rootPid
     $script:ownershipInspection = 'ok'
     foreach ($ownedId in $tree) {
@@ -203,7 +223,8 @@ function Observe-OwnedTree {
 
 function Get-LiveOwnedRecords {
     $snapshot = Get-ProcessSnapshot
-    if ($snapshot.Count -eq 0) { return @() }
+    if ($null -eq $snapshot) { return @() }
+    $script:ownershipInspection = 'ok'
     $live = @()
     foreach ($ownedId in @($ownedPids)) {
         $expected = $ownedRecords[[int]$ownedId]
@@ -227,10 +248,8 @@ function Add-OwnershipIssue([string]$issue) {
 function Get-RootOwnership {
     if ($null -eq $rootPid) { return [pscustomobject]@{ status = 'no-root' } }
     $snapshot = Get-ProcessSnapshot
-    if ($snapshot.Count -eq 0) {
-        Add-OwnershipIssue 'ownership-unavailable'
-        return [pscustomobject]@{ status = 'unavailable' }
-    }
+    if ($null -eq $snapshot) { return [pscustomobject]@{ status = 'unavailable' } }
+    $script:ownershipInspection = 'ok'
     $current = @($snapshot | Where-Object { [int]$_.Id -eq [int]$rootPid } | Select-Object -First 1)
     if ($current.Count -eq 0) { return [pscustomobject]@{ status = 'exited' } }
     $expected = $ownedRecords[[int]$rootPid]
@@ -273,6 +292,8 @@ function Stop-ExactProcessTree([int]$targetPid) {
 }
 
 function Stop-OwnedProcesses([bool]$includeRoot) {
+    Observe-OwnedTree
+    if ($cimUnavailable) { return }
     if ($includeRoot -and $null -ne $rootPid) { [void](Stop-OwnedRoot) }
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
         $live = @(Get-LiveOwnedRecords | Where-Object { $null -eq $rootPid -or [int]$_.Id -ne [int]$rootPid })
@@ -401,14 +422,31 @@ try {
 } finally {
     $stdout = Read-AsyncText $stdoutTask
     $stderr = Read-AsyncText $stderrTask
+    if ($null -ne $process -and $process.HasExited -and $null -eq $processExitCode) { $processExitCode = $process.ExitCode }
     Write-Utf8Text (Join-Path $output 'stdout.txt') $stdout
     Write-Utf8Text (Join-Path $output 'stderr.txt') $stderr
 
     $liveFinal = @(Get-LiveOwnedRecords)
-    $residualPids = @($liveFinal | ForEach-Object { [int]$_.Id })
+    $cleanupUnverified = $cimUnavailable -or $ownershipInspection -ne 'ok' -or @($ownershipIssues).Count -gt 0 -or $null -eq $rootPid
+    if ($cleanupUnverified) {
+        $cleanupStatus = 'unverified'
+        $ownershipVerified = $false
+        $residualPids = @()
+        $residualCount = $null
+    } elseif ($liveFinal.Count -gt 0) {
+        $cleanupStatus = 'verified-residual'
+        $ownershipVerified = $true
+        $residualPids = @($liveFinal | ForEach-Object { [int]$_.Id })
+        $residualCount = $residualPids.Count
+    } else {
+        $cleanupStatus = 'verified-clean'
+        $ownershipVerified = $true
+        $residualPids = @()
+        $residualCount = 0
+    }
     $acceptancePresent = Test-Path -LiteralPath $acceptancePath -PathType Leaf
     $elapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds
-    $runnerResult = if ($startError) { 'start-failed' } elseif ($timedOut) { 'timeout' } elseif ($residualPids.Count -gt 0) { 'residual-owned-processes' } elseif ($terminalObserved) { 'completed' } else { 'missing-terminal-result' }
+    $runnerResult = if ($startError) { 'start-failed' } elseif ($timedOut) { 'timeout' } elseif ($cleanupStatus -eq 'unverified') { 'cleanup-unverified' } elseif ($residualPids.Count -gt 0) { 'residual-owned-processes' } elseif ($terminalObserved) { 'completed' } else { 'missing-terminal-result' }
     $runnerExitCode = if ($runnerResult -eq 'completed' -and $terminalClassification -eq 'success') { 0 } elseif ($runnerResult -eq 'timeout') { 124 } else { 1 }
     $result = [ordered]@{
         schemaVersion = 1
@@ -418,6 +456,8 @@ try {
         runtimeValidation = $runtimeValidation
         terminalResult = [ordered]@{ observed = $terminalObserved; source = if ($terminalObserved) { 'acceptance.json completed + classification' } else { 'not-observed' }; classification = $terminalClassification; observedElapsedMs = $terminalObservedElapsedMs }
         ownershipIssues = @($ownershipIssues)
+        cleanupStatus = $cleanupStatus
+        ownershipVerified = $ownershipVerified
         rootPid = $rootPid
         elapsedMs = $elapsedMs
         deadlineMs = $TimeoutMs
@@ -428,9 +468,10 @@ try {
         stdoutPresent = (Test-Path -LiteralPath (Join-Path $output 'stdout.txt') -PathType Leaf)
         stderrPresent = (Test-Path -LiteralPath (Join-Path $output 'stderr.txt') -PathType Leaf)
         ownershipInspection = $ownershipInspection
-        residualOwnedProcesses = $residualPids.Count
+        residualOwnedProcesses = $residualCount
+        residualOwnedProcessesKnown = $ownershipVerified
         residualOwnedPids = $residualPids
-        cleanup = 'exact-root-process-tree'
+        cleanup = if ($cleanupStatus -eq 'unverified') { 'not-verified' } else { 'exact-root-process-tree' }
         output = $output
         error = $startError
     }

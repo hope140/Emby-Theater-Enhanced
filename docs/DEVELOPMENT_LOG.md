@@ -1,10 +1,25 @@
 # 开发日志
 
+## 2026-09-14 — terminal writer 与 cleanup verification follow-up
+
+本轮只处理 acceptance harness 的终态写入和 cleanup verification，产品代码、resolver、observer、PlaybackManager、libmpv、preload、CD2、Pepper bridge 与服务器配置均未修改。`inspectProfile()`、normal success/failure、operation failure 与 global timeout 现在都通过同一个 `createTerminalWriter()`，其内部复用 `OPEN → FINALIZING → COMPLETED` single-writer guard；losing path 在 await 返回后先检查 ownership，不再写入 shared `failure`、terminal classification 或 `report.completed`。
+
+新增 integration synthetic 覆盖 `inspectProfile` failure 与 global timeout 的近同时竞争，以及 success claim 后 losing failure 的污染尝试；两项均只产生一次 terminal save，胜出的 classification 保持不变。CIM/WMI 查询失败现在 fail closed：不 kill 未确认 ownership 的 PID，`cleanupStatus=unverified`、`ownershipVerified=false`、`residualOwnedProcesses=null`，runnerResult=`cleanup-unverified` 且返回非零。正常 success/failure/timeout 保持 `verified-clean`；CreationDate mismatch 保持 `pid-reused`/`ownership-mismatch` 并阻止完整 cleanup success。
+
+`dist/EmbyTheaterEnhanced-0.1.1-provenance3-20260914` 在本 follow-up commit 前绑定 `8a3433e53a9c47bba0c25ff5b43e1b3281a4fe9e`，full provenance positive validation 820/820 通过；较早 `provenance2` runtime 因 sourceCommit stale 被 ValidationOnly negative 正确报告为 `runtime-validation-failed`，未启动 Electron。未运行真实 Emby acceptance。
+
+Model Tier: 2
+Model: current Codex session
+Reason: terminal ownership race and cleanup-verification semantics cross the Electron writer and PowerShell runner, while product playback remains frozen
+Escalated: no
+
+结论：terminal writer、inspectProfile integration race、losing-writer protection、CIM unavailable fail-closed 和既有 PID mismatch 均有合成证据，可进入独立 follow-up commit review。
+
 ## 2026-09-14 — readiness harness boundary hardening
 
 本轮是 readiness harness 的独立 follow-up 审计，产品代码、PlaybackManager、libmpv、preload、CD2、Pepper bridge、resolver 和服务器配置均保持不变。runtime provenance 从少量 sentinel 扩展为构建范围清单：覆盖 `src/electronapp` 的全部 818 个文件和两个 `Start-Enhanced` wrapper，共 820 个 scope entries；`package.json` 元数据与 PlaybackManager 改写分别记录为显式 build overlay。`sourceCommit`、`validatedProductScope` 与 `baselineIdentity` 分开保存，vendor baseline、node_modules production closure、Electron runtime binary 和 native mpv 不归入产品 scope。
 
-`dist/EmbyTheaterEnhanced-0.1.1-provenance2-20260914` 在 follow-up commit 前绑定 baseline `3d1cc6d906131d2e7e1d0a10af5fd354b228a41d`，full provenance positive validation 与 package payload verification 通过；旧 partial-stale runtime 的 ValidationOnly negative 以 `runtime-validation-failed` fail-fast，未启动 Electron。runner 的 terminal guard 采用 `OPEN → FINALIZING → COMPLETED` 单写入语义，success/failure/timeout 与 terminal race synthetic 均通过；PID cleanup 在 kill 前重新读取 root PID 的 CreationDate，synthetic mismatch 记录 `pid-reused`/`ownership-mismatch`，不执行不属于本次 run 的清理。
+`dist/EmbyTheaterEnhanced-0.1.1-provenance2-20260914` 在上一 follow-up commit 前绑定 baseline `3d1cc6d906131d2e7e1d0a10af5fd354b228a41d`，full provenance positive validation 与 package payload verification 通过；旧 partial-stale runtime 的 ValidationOnly negative 以 `runtime-validation-failed` fail-fast，未启动 Electron。runner 的 terminal guard 采用 `OPEN → FINALIZING → COMPLETED` 单写入语义，success/failure/timeout、terminal race 与 PID mismatch synthetic 均通过；后续本轮补充了 `inspectProfile` integration race、losing-writer protection 与 CIM fail-closed。PID cleanup 在 kill 前重新读取 root PID 的 CreationDate，synthetic mismatch 记录 `pid-reused`/`ownership-mismatch`，不执行不属于本次 run 的清理。CIM lookup unavailable synthetic 以 `cleanupStatus=unverified`、`ownershipVerified=false`、residual 未知结束，runner 不报告完整 success，也不 kill 不确定 PID。
 
 历史 real artifact 分开保留：`readiness-main-20260914-070236533-48d1e60e` 是旧 runner lifecycle 下 acceptance success 但 `runnerResult=timeout`、总耗时 `242507ms`；`terminal-real-20260914-073146032-27837240` 是终态收尾修复后的 acceptance success、`runnerResult=completed`、`timedOut=false`、总耗时 `15959ms`、residual=0。两次均将 `loadfileObservation=unavailable` 作为 observability gap，不作为 gate。本轮 follow-up 没有运行真实 acceptance。
 
@@ -65,7 +80,7 @@ Escalated: no
 
 `tests/live-acceptance-browser.js` 现按最小路径获取对象：有界等待并调用 `window.ConnectionManager.currentApiClient()`（必要时使用 `window.ApiClient`），只对已确认的 `playbackManager` 做一次 `require(['playbackManager'])`，事件对象直接使用 `window.Events`。没有新增通用 AMD resolver、自动扫描、relative-path probe 或 batch require；`tools/acceptance-electron.cjs` 只将 inspect acquisition 摘要提升到报告顶层，`tools/acceptance-readiness.cjs` 增加 API/PlaybackManager/Events 前置分类。observer 保持未改。
 
-最小 fixture 验证了 global API + single playbackManager require，以及已有 playbackManager global 两条受控路径；JS/PowerShell syntax、observer self-test、runner synthetic（exact root cleanup/residual 0）、`npm test` 56/56 和 `git diff --check` 通过。
+实际 acquisition 路径已在 real acceptance artifact 中观察到 `window.ConnectionManager.currentApiClient`、canonical `playbackManager` require 与 `window.Events`；现有可重复 fixture 只覆盖 profile inspect 的 client lookup，没有独立 fixture 证明上述三条 live acquisition 路径。JS/PowerShell syntax、observer self-test、runner synthetic（exact root cleanup/residual 0）、`npm test` 56/56 和 `git diff --check` 通过。
 
 旧 `module-acq-20260914-061651157-ec84996` iteration 中，`inspect=PASS`、`select=PASS`、`play-called=seen`；acquisition 为 `currentApiClient=window.ConnectionManager.currentApiClient/available`、`PlaybackManager=amd-require:playbackManager/available`、`Events=window.Events/available`。随后 `embed-created`、Pepper authoritative-ready 与 `manager-play-resolved` 均被观察到，但 `resolver-enter` 未观察到，flow 以 `resolver-entry-timeout` 停止，`loadfile` 未观察到；没有新增完整 resolver/Session/remote-control/DirectUrl 全链通过结论。runner 最终达到 240000ms bounded deadline，报告存在，ownership inspection=ok，residual owned processes=0，并按 exact root process tree 清理。
 

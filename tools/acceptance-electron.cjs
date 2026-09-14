@@ -5,7 +5,7 @@ const {app} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const readiness = require('./acceptance-readiness.cjs');
-const {createFinishOnce} = require('./acceptance-terminal-guard.cjs');
+const {createTerminalWriter} = require('./acceptance-terminal-guard.cjs');
 const runtime=process.env.ETE_ACCEPT_RUNTIME;
 const output=process.env.ETE_ACCEPT_OUTPUT;
 if(!runtime || !output) throw Error('Live acceptance parameters required');
@@ -23,7 +23,6 @@ const epoch=Number(process.env.ETE_ACCEPT_EPOCH||Date.now());
 const recorder=readiness.createRecorder();
 const report={startedAt:new Date().toISOString(),version:metadata.version,runtime:{name:process.env.ETE_ACCEPT_RUNTIME_NAME||path.basename(runtime),sourceCommit:process.env.ETE_ACCEPT_SOURCE_COMMIT||'',validation:process.env.ETE_ACCEPT_RUNTIME_VALIDATED==='1'?'passed':'unvalidated'},readinessEpoch:epoch,stages:[],completed:false};
 const resolverMessages=[];
-let failure=null;
 function trace(stage){try{fs.writeFileSync(path.join(output,'acceptance-trace.txt'),stage+'\r\n',{flag:'a'});}catch(_){}}
 function mark(stage){recorder.mark(stage,Date.now()-epoch);}
 function recordResolverMessage(message){
@@ -42,32 +41,26 @@ function safeText(value,limit){
     const text=String(value||'').replace(/[A-Za-z]:\\[^\s'"]*/g,'<path>').replace(/\s+/g,' ').trim();
     return text.length>limit?text.slice(0,limit):text;
 }
-const end=createFinishOnce(async function(error){
-    if(report.completed)return;
+const end=createTerminalWriter({report,save,exit:code=>app.exit(code),beforeWrite:async function(error,terminal){
     try{
         const state=await evaluate('window.__eteReadiness ? window.__eteReadiness.snapshot() : null');
         report.readinessState=recorder.sanitizeState(state);
     }catch(_){ }
     if(win) await evaluate('window.eteAcceptance ? window.eteAcceptance.cleanup() : Promise.resolve()').catch(()=>{});
+    if(terminal.mark)mark(terminal.mark);
     mark('acceptance-end');
     recorder.setResolverRows(safeResolverRows(resolverMessages));
     report.readiness=recorder.build(report);
-    report.error=error || null;
-    report.acceptanceResult=error ? (failure && failure.failureClassification || error) : 'success';
-    report.completed=true;save();app.exit(error?1:0);
-});
+}});
 async function inspectProfile(){
     const result=await evaluate('('+profileInspectSource+')(require)');
-    report.loggedIn=!!(result&&result.loggedIn);
-    report.reason=result&&typeof result.reason==='string'?result.reason:'inspection-error';
-    report.completed=true;
-    save();
-    app.exit(0);
+    const reason=result&&typeof result.reason==='string'?result.reason:'inspection-error';
+    await end(null,{profile:{loggedIn:!!(result&&result.loggedIn),reason},classification:reason});
 }
 if(!manualLogin)setTimeout(()=>{
-    if(profileInspect){report.loggedIn=false;report.reason='inspection-error';}
-    mark('acceptance-budget-exceeded');
-    end('acceptance-timeout');
+    const terminal={classification:'acceptance-timeout',mark:'acceptance-budget-exceeded'};
+    if(profileInspect)terminal.profile={loggedIn:false,reason:'inspection-error'};
+    void end('acceptance-timeout',terminal);
 },profileInspect?30000:240000);
 app.on('browser-window-created',(_,created)=>{
     trace('browser-window-created');
@@ -106,30 +99,30 @@ app.on('browser-window-created',(_,created)=>{
                 const override=String(process.env.ETE_ACCEPT_METHODS||'').split(',').map(name=>name.trim()).filter(name=>/^[A-Za-z]+$/.test(name));
                 const methods=override.length?override:process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_SELECT_ONLY?['inspect','select']:process.env.ETE_ACCEPT_DIRECT_SMOKE?['inspect','select','directSmoke']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
                 for(const method of methods){
+                    if(end.state()!=='OPEN')return;
                     report.currentStage=method;save();
                     trace('method-start='+method);
                     const result=await evaluate('window.eteAcceptance.'+method+'()');
+                    if(end.state()!=='OPEN')return;
                     trace('method-done='+method);
                     report.stages.push({method,result,time:new Date().toISOString()});save();
                     if(method==='inspect'&&result&&result.moduleAcquisition)report.moduleAcquisition=result.moduleAcquisition;
                     if(result&&result.ok===false){
-                        failure={method,reason:result.reason,failureClassification:result.failureClassification,stage:result.stage,errorType:result.errorType};
-                        report.failure=failure;
-                        report.acceptanceResult=failure.failureClassification || failure.reason || 'acceptance-failed';
-                        await end(method+'-failed');
+                        const failure={method,reason:result.reason,failureClassification:result.failureClassification,stage:result.stage,errorType:result.errorType};
+                        await end(method+'-failed',{failure,classification:failure.failureClassification||failure.reason||'acceptance-failed'});
                         return;
                     }
                 }
+                if(end.state()!=='OPEN')return;
                 const combined=safeResolverRows(resolverMessages);
                 if(combined.length)report.resolver=combined;
                 recorder.setResolverRows(combined);
                 await end();
             }catch(error){
                 // Sanitized: only the first line and frame of the failure, never data.
-                report.operationError=safeText(error&&error.message,160);
-                trace('operation-error '+report.operationError);
-                report.acceptanceResult='acceptance-operation-failed';
-                await end('acceptance-operation-failed');
+                const operationError=safeText(error&&error.message,160);
+                trace('operation-error '+operationError);
+                await end('acceptance-operation-failed',{operationError,classification:'acceptance-operation-failed'});
             }
         })();
     });

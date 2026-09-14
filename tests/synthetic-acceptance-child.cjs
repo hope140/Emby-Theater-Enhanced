@@ -10,7 +10,7 @@ if (!output) throw new Error('Synthetic output is required');
 process.stdout.write('synthetic-stdout');
 process.stderr.write('synthetic-stderr');
 if (scenario !== 'timeout') {
-    const acceptanceResult = scenario === 'success' || scenario === 'identity-mismatch' ? 'success' : 'synthetic-failure';
+    const acceptanceResult = scenario === 'success' || scenario === 'identity-mismatch' || scenario === 'cim-unavailable' ? 'success' : 'synthetic-failure';
     fs.writeFileSync(path.join(output, 'acceptance.json'), JSON.stringify({
         completed: true,
         acceptanceResult,
@@ -18,5 +18,6 @@ if (scenario !== 'timeout') {
     }));
 }
 
-if (scenario === 'identity-mismatch') setTimeout(function () { process.exit(0); }, 2000);
+if (scenario === 'identity-mismatch') setTimeout(function () { process.exit(0); }, 5000);
+if (scenario === 'cim-unavailable') setTimeout(function () { process.exit(0); }, 1500);
 setTimeout(function () {}, 60000);
