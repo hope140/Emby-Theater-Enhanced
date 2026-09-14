@@ -54,7 +54,7 @@ Local audit workspace：41 个 ignored snapshot files 曾在本机删除。Durab
 
 - Baseline：用户提供的 Carnival 3.0（应用 3.0.20-3.0）+ 综合补丁最终 ZIP。
 - Enhanced：0.1.1 开发候选；Windows host 文件版本保持 3.0.20.0，Electron 应用构建版本为 0.1.1。
-- Git：本轮基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 创建 `cleanup/external-player-process-chain`；Batch 2 变更只保留在该本地分支，未 push、未 merge、未创建 PR。未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
+- Git：本轮基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 在 `cleanup/external-player-process-chain` 完成 Batch 2；技术基线与验证结果记录于本节，具体合并状态以仓库 Git/PR 历史为准。未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
 - 源码：`src/electronapp`；原件在根目录，解包输入在 `vendor/carnival` 与 `vendor/patch`。
 - 交付：`dist/EmbyTheaterEnhanced-0.1.1-final-win-x64/Start-Enhanced.cmd`；`dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe`。旧 0.1.0 产物保留。
 - 工具：`tools/prepare.ps1`、`build.ps1`、`package.ps1`、`test-runtime.ps1`、`test-host.ps1`、`tests/readiness-acceptance.ps1`。
