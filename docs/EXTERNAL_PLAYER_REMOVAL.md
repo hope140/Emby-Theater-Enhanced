@@ -2,15 +2,17 @@
 
 ## 当前状态
 
-第一轮的入口禁用已经完成；Foundation Cleanup / Batch 1 又物理移除了 External Player 的前端与插件表层。当前状态是：
+第一轮的入口禁用已经完成；Batch 1 移除了 External Player 的前端与插件表层；本轮 Batch 2 又移除了已经没有 consumer 的 host/process-control chain。当前状态是：
 
-> External Player frontend/plugin layer removed; main-process/helper residue remains for Batch 2 audit/removal.
+> External Player frontend/plugin layer and process-control chain removed; settings/autoplay/PlaybackManager/shared residue remains for later cleanup.
 
 本轮基线与提交：
 
 - Audit commit：`fb434e57f2cca065c784e0551c651ef57d1a2634`，`docs: record legacy runtime audit`
 - Cleanup branch：`cleanup/external-player-frontend`
 - Cleanup commit：`adc8758902a580cc3bc7fc33bfb10a6b422c828d`，`cleanup: remove dead external player frontend`
+- Batch 2 branch：`cleanup/external-player-process-chain`
+- Batch 2 baseline：`main@65d97da975ea1ffc3505c099094086c33667931e`
 
 ## Batch 1 已完成范围
 
@@ -30,27 +32,35 @@ Durable repository/product behavior：`runtime-provenance.cjs` 的精确 source 
 
 本轮 portability 修复已把该 exclusion 写入 provenance manifest，并用 source sentinel 验证存在/不存在两种机器状态的 scope 一致性。
 
+## Batch 2 已完成范围
+
+| 位置 | 旧用途 | Batch 2 结果 |
+|---|---|---|
+| `src/electronapp/main.js` 的 `mpvPosEvent` / `mpvPos` / named pipe | 外置 mpv playback-time polling 与 renderer 回传 | **REMOVED**；handler、socket、timer、reconnect/cleanup 和回传均删除 |
+| `src/electronapp/shell.js` 的 process slice | `canExec`、`exec`、`close`、close-event helpers 和外置 exe 生命周期 | **REMOVED**；保留同模块 `shell.openUrl` |
+| `electronapphost` `shellstart` / `shellclose` | shell process URL dispatch | **REMOVED**；其它 host command 保持 |
+| main `processes` / `startProcess` / `closeProcess` / `execFile` chain | 外置 exe 启动、PID 跟踪和关闭回调 | **REMOVED**；Anime4K `child_process.exec('notepad.exe ...')` 独立保留 |
+
+删除前的重新审计确认：旧 External Player plugin 已随 Batch 1 从 fresh runtime 排除；上述候选没有其它当前 consumer。`window.ipc` 是 generic bridge，当前 CD2/diagnostics 仍使用；`shell.openUrl` 仍由 IAP、metadata editor、registration services 和通用 `emby-button` 使用；`electronapphost` 仍承载窗口、休眠、电源、audio/video lock、loaded 和 CEC 能力。
+
 ## 仍然保留的共享能力
 
 - `src/electronapp/shell.js` 保留。`shell.openUrl` 仍被 IAP、metadata editor、registration services 和通用 `emby-button` 使用。
-- `shell.exec` 的 main-process 实现、`shellstart` / `shellclose`、`mpvPosEvent`、named pipe 和外置 helper 本轮没有删除。
+- Electron custom shell 的 process-only contract、`shellstart` / `shellclose`、`mpvPosEvent`、named pipe 和旧外置 helper chain 已在 Batch 2 删除；浏览器 fallback 的 unsupported `canExec/exec` 实现仍保持独立。
 - `src/electronapp/preload.js`、generic `window.ipc`、CD2 IPC 和 diagnostics IPC 保留。
 - CEC、Pepper / PPAPI、libmpv、PlaybackManager、remoteplayer、Session、resolver、CD2、DirectUrl、Mount 和用户设置数据均未修改。
 
-## Batch 1 后的残余
+## Batch 2 后的残余
 
 | 残余 | 当前状态 | 后续批次 |
 |---|---|---|
-| `src/electronapp/main.js` 的 `mpvPosEvent` / named pipe | 未修改；现在没有 External Player 前端 consumer | Batch 2，单独验证 IPC 删除 |
-| `src/electronapp/shell.js` 的 `canExec` / `exec` / `close` | 未修改；`openUrl` shared | Batch 2，按 method 拆分 |
-| main `shellstart` / `shellclose`、`startProcess` / `closeProcess` | 未修改 | Batch 2，核对 host protocol 边界 |
-| `external/` preset、shader、font 与 Anime4K helper | 未修改，仍随 vendor payload 保留 | Batch 2/3，等待用户 workflow 决策 |
-| `Emby.ConfigureAndUninstall.bat`、`Emby.Dialog.bat` | 未修改，仍随 vendor root 保留 | Batch 2/3，单独处理手工 helper payload |
-| `settings/playback.js/html` external field 与 `enableSystemExternalPlayers` | 未修改；当前字段由 unsupported `externalplayerintent` 隐藏，但仍有读写代码 | Batch 2 |
-| `item.js` 的 `externalplayers` autoplay gate、PlaybackManager external-player guards | 未修改 | Batch 2，需 UI/Session/report 回归 |
+| `external/` preset、shader、font 与 Anime4K helper | 未修改，仍随 vendor payload 保留 | 后续批次，等待用户 workflow 决策 |
+| `Emby.ConfigureAndUninstall.bat`、`Emby.Dialog.bat` | 未修改，仍随 vendor root 保留 | 后续批次，单独处理手工 helper payload |
+| `settings/playback.js/html` external field 与 `enableSystemExternalPlayers` | 未修改；当前字段由 unsupported `externalplayerintent` 隐藏，但仍有读写代码 | 后续 UI/shared batch |
+| `item.js` 的 `externalplayers` autoplay gate、PlaybackManager external-player guards | 未修改 | 后续 UI/shared batch，需 UI/Session/report 回归 |
 | CEC driver installer、重复 x64/non-x64 别名、opaque host executable 参数 | 未修改 | Batch 3 / UNKNOWN |
 
-不要把上述残余写成“External Player 已全部清理完成”。准确结论仅为前端/plugin layer 已移除。
+不要把上述残余写成“External Player 已全部清理完成”。准确结论是 frontend/plugin layer 与 host/process-control chain 已移除，settings/autoplay/PlaybackManager/shared residue 仍然存在。
 
 ## 删除前引用证明
 
@@ -65,13 +75,13 @@ Batch 1 删除前重新检查了 `rg`、AMD `require`、plugin registration、ro
 删除后残留的 `externalplayer` 文本逐项分类如下：
 
 - Android 平台分支：DEFER，属于共享 Web runtime 的平台兼容代码。
-- `item.js` / `settings/playback.js` / `appsettings.js`：UNKNOWN/Batch 2，涉及普通 autoplay UI 和历史设置值。
+- `item.js` / `settings/playback.js` / `appsettings.js`：后续 UI/shared batch，涉及普通 autoplay UI 和历史设置值。
 - `playbackmanager.js` / `playbackorientation.js`：DEFER，涉及 Session、report 和播放器生命周期。
 - `tools/smoke-electron.cjs` 中的 `!state.players.some(...)`：合法的负向 runtime smoke 断言。
 - `tools/build.ps1` 中的 exclusion path：合法的 packaging rule。
 - 历史 docs、测试日志和 vendor 原件：历史/来源证据，保留。
 
-## 验证结果
+## Batch 1 验证结果
 
 验证 runtime：`dist/EmbyTheaterEnhanced-0.1.1-batch1-after-cleanup-adc8758`。
 
@@ -80,7 +90,7 @@ Batch 1 删除前重新检查了 `rg`、AMD `require`、plugin registration、ro
 - deleted External Player entries：0
 - `package.ps1 -VerifyOnly`：PASS，2,116 个 payload files
 - Foundation 文件：embedded libmpv、PlaybackManager、STRM resolver、CD2 resolver/service、preload 均存在
-- 自动测试：62/62 PASS
+- 自动测试：Batch 1 当时记录为 62/62 PASS
 - JavaScript syntax：454 files PASS
 - PowerShell syntax：11 files PASS
 - `git diff --check`：PASS
@@ -104,6 +114,25 @@ Batch 1 删除前重新检查了 `rg`、AMD `require`、plugin registration、ro
 
 `loadfileObservation=unavailable` 仍是既有 observability gap，不作为本轮硬 gate；本轮没有因此修改播放器或 acceptance observer。
 
+## Batch 2 验证结果
+
+- fresh runtime：`dist/EmbyTheaterEnhanced-0.1.1-batch2-process-chain-65d97da`
+- runtime provenance：PASS，779 product-scope entries；`package.ps1 -VerifyOnly`：PASS，2,116 个 payload files
+- targeted process-chain tests：5/5 PASS；全量 `npm test`：67/67 PASS
+- JavaScript syntax：455 files PASS；PowerShell syntax：11 files PASS；`git diff --check`：PASS
+- runtime `electronapp` 中 `mpvPosEvent`、`mpvPos`、`mpv-socket`、`shellstart`、`shellclose`、`startProcess`、`closeProcess`、`onChildProcessClosed`：0 active references
+- `shell.openUrl` targeted smoke：PASS，仍发送 `GET electronapphost://openurl?url=...`；其它 active host commands、generic IPC/CD2、diagnostics、CEC、Anime4K helper、libmpv、resolver、PlaybackManager 和 `sessionplayer.js` 均存在
+
+唯一一次 Batch 2 bounded real acceptance 使用 `inspect,select,play,pause,seek,resume,next,stop`：
+
+- inspect/select/play/pause/seek/resume/next/stop：全部 PASS
+- select：`strm=true`
+- Pepper-ready、resolver-result、manager-play-resolved：observed
+- Session/reporting：PASS；控制命令由 server 接受并通过 WebSocket 送达
+- cleanup：`verified-clean`；residual owned processes：0；runner：`completed`，`timedOut=false`
+
+`loadfileObservation=unavailable` 仍是既有 observability gap，不作为本轮硬 gate。真实 acceptance 没有修改服务器配置、媒体库、账号、CD2、mount/cache 或用户设置；只产生了正常播放进度。
+
 ## 清理效果
 
 对照 runtime 为同一 Audit commit 上构建的 `dist/EmbyTheaterEnhanced-0.1.1-batch1-before-cleanup`：
@@ -114,3 +143,12 @@ Batch 1 删除前重新检查了 `rg`、AMD `require`、plugin registration、ro
 - Runtime size：389,112,766 → 389,008,884 bytes，减少 103,882 bytes（包含 provenance/build metadata 变化）
 
 体积不是本轮主要目标；主要收益是从新 runtime 移除无入口的 External Player frontend/plugin surface。
+
+Batch 2 process-control 对照 `dist/EmbyTheaterEnhanced-0.1.1-batch1-after-cleanup-adc8758`：
+
+- product tracked files deleted：0；`main.js`/`shell.js` 内部 dead surface 删除，不删除文件
+- product lines removed：165；新增 targeted test 123 lines
+- runtime file count：2,117 → 2,117，减少 0
+- runtime size：389,008,884 → 389,005,881 bytes，减少 3,003 bytes
+
+runtime 文件数量保持不变是预期结果，因为本批删除的是现有 `main.js`、`shell.js` 文件内的 dead contract，而不是整个文件；主要收益是 host/process legacy surface 归零。

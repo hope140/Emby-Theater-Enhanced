@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1
 python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv/x64/mpv-1.dll
 ```
 
-单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount 和 persistent profile inspect 安全枚举。当前为 56/56。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包验证。
+单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount 和 persistent profile inspect 安全枚举。当前为 67/67。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包验证。
 
 ## Acceptance readiness harness
 

@@ -1,8 +1,24 @@
 # Legacy Audit
 
 审计日期：2026-09-14（UTC+8）
-审计基线：`main@c873913ea1a2716e048e785fa2fd83294dd091b5`
-审计范围：Foundation Cleanup / Legacy Audit；本文件已记录后续 Batch 1 的执行结果。Batch 1 只处理 External Player frontend/plugin layer，不重构播放链、不升级 Electron/mpv、不运行 Carnival 或综合补丁安装/恢复脚本。
+审计基线：`main@65d97da975ea1ffc3505c099094086c33667931e`
+执行分支：`cleanup/external-player-process-chain`
+审计范围：Foundation Cleanup / Legacy Cleanup Batch 2；本文件同时保留 Batch 1 的历史执行记录。本批只处理 External Player process-control chain，不重构播放链、不升级 Electron/mpv、不运行 Carnival 或综合补丁安装/恢复脚本。
+
+## 2026-09-14 — Cleanup Batch 2：External Player process-control chain
+
+本轮重新检查了 `rg`、IPC registration、`electronapphost` protocol dispatch、动态 command string、preload exposure、shell consumer、main caller、tests 和 build/package 输入。结论是旧 External Player frontend/plugin 已在 Batch 1 从 fresh runtime 排除，以下 host/process consumer 均已消失，允许删除对应 producer 和 process-only contract。
+
+| 候选 | producer | consumer / entry point | shared consumer | 当前可达性 | 结果 |
+|---|---|---|---|---|---|
+| `mpvPosEvent`、`mpvPos`、`mpv-socket` | `main.js` 的旧 `net.Socket`、timer、`ipcMain.handle` 和 `webContents.send` | 旧 vendor plugin 的 `window.ipc.invoke/on` 与外置 mpv pipe 参数；当前维护层无 entry | `window.ipc` 仍由 CD2 resolve/cancel 与 diagnostics 使用，但不依赖这些 channel | 无当前 producer/consumer | **REMOVED** |
+| `shell.canExec`、`shell.exec`、`shell.close`、close-event helpers | `src/electronapp/shell.js` custom shell module | 旧 plugin 的 `getPlayer`、外置 exe 启动和关闭回调；当前 custom shell 无其它调用者 | 同一模块的 `shell.openUrl` 仍被 4 类 Web module 使用 | process-only slice 不可达；`openUrl` 保持可达 | **REMOVED** |
+| `electronapphost://shellstart`、`shellclose` | `shell.exec/close` 生成的 protocol URL；`main.js` 的 command cases | 只进入旧 `startProcess/closeProcess` dispatch | 同一 host protocol 仍承载 openurl、窗口状态、sleep/shutdown、audio/video lock、loaded、CEC 等 active commands | 无当前 entry | **REMOVED** |
+| `processes`、`startProcess`、`closeProcess`、`execFile` callback chain | `main.js` 的 process map/helper | 只被 `shellstart/shellclose` cases 调用 | Anime4K 使用独立的 `child_process.exec('notepad.exe …')`；CEC/refresh-rate 使用各自的 process path | 无当前 caller | **REMOVED** |
+
+明确保留：`shell.openUrl`、generic `window.ipc` bridge、CD2/diagnostics IPC、CEC、Pepper/libmpv、PlaybackManager、Session/remote control、resolver 和 native fallback。`src/electronapp/www/modules/shell.js` 的浏览器 fallback 仍是独立的 `openUrl`/unsupported-exec implementation，不等于 Electron custom shell 的外置进程 contract；本轮未改动它。
+
+vendor/carnival 中的旧 main/shell/plugin 文本仍作为只读来源保留，fresh Enhanced runtime 不复制 External Player frontend，维护产品代码和新 runtime 中上述 active process chain 为 0。settings/autoplay、PlaybackManager external-player guards、shared locale/CSS、`external/` 和 vendor helper 仍留在后续范围。
 
 ## Executive Summary
 
@@ -11,13 +27,13 @@
 主要结论：
 
 - External Player 的默认注册已关闭，维护版模块此前提供的防护与 41 个本地 ignored frontend 文件均已处理；Batch 1 现在还由 tracked build-time patch 在 fresh runtime 中强制移除 Electron registration，source snapshot 存在与否结果一致。vendor 原件仍只读保留。
-- `mpvPosEvent`、`mpv-socket` named pipe 及其 `mpvPos` 回传只有 External Player 旧实现消费，且消费代码位于当前防护壳的不可达代码之后，具备与 External Player 同批拆除的条件。
-- `src/electronapp/shell.js` 不能整体删除。`openUrl` 仍被 IAP、元数据编辑、注册服务和通用 `emby-button` 使用；仅 `canExec`、`exec`、`close` 及 main process 的 `shellstart` / `shellclose` 进程管理分支属于外置播放器遗留候选。
+- `mpvPosEvent`、`mpv-socket` named pipe、`mpvPos` 回传及其 main-process producer 已在 Batch 2 删除；旧 vendor 文本只读保留，维护产品代码和 fresh runtime 不再有 active reference。
+- `src/electronapp/shell.js` 仍保留 shared `openUrl`。`canExec`、`exec`、`close`、close-event helpers、`shellstart` / `shellclose` 以及 `startProcess` / `closeProcess` process chain 已确认只有旧 External Player consumer，现已删除。
 - CEC 不是死代码。Electron 启动时动态加载 `plugins/cec.js`，插件构造时请求 `electroncec://start`，main process 会加载 `cec/cec.js` 并连接输入事件。CEC 应 KEEP；driver installer、重复二进制别名和普通启动时的可执行文件参数仍需额外证据。
 - Pepper/PPAPI、内嵌 libmpv、Electron 18、PlaybackManager、Session/PlaySession、remoteplayer、resolver、CD2、Mount、DirectUrl、preload diagnostics、readiness harness 和 runtime provenance 均属于 KEEP 或 DEFER，不能按“历史代码”删除。
 - `tools/build.ps1` 仍校验并复制全部 1009 个 Carnival 文件，但 Batch 1 已加入纯 External Player frontend exclusion；`installer/EmbyTheaterEnhanced.iss` 继续递归复制最终 runtime。其它 helper、CEC、external/ 和 main-process 残余仍未清理。
 
-结论：**Batch 1 frontend/plugin layer REMOVED；READY FOR BATCH 2 PLANNING**。本轮没有修改播放、Session、main IPC 或 shared shell；产品行为回归通过。
+结论：**Batch 1 frontend/plugin layer REMOVED；Batch 2 External Player process-control chain REMOVED**。本轮保留 generic IPC、shared `shell.openUrl`、播放/Session/remote control、CEC 和 Anime4K helper；settings/autoplay/PlaybackManager residue 仍未处理。
 
 ### Provenance portability follow-up
 
@@ -57,10 +73,10 @@ Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` �
 |---|---|---|
 | PlaybackManager、Item、MediaSource、PlaySession、进度、队列和远控生命周期 | `docs/ARCHITECTURE.md`、`docs/PLAYBACK_PIPELINE.md`；当前 PlaybackManager 仍处理普通媒体、STRM、换集和上报 | KEEP。删除外置分支时也必须保留身份链和 native fallback |
 | 内嵌 libmpv、Pepper bridge、`libmpv.js` | `src/electronapp/main.js:837-883` 注册 Pepper；`src/electronapp/plugins/libmpv.js` 通过 PlaybackManager 播放并接入 resolver | KEEP。它是当前正式视频路径，也是未来 Player Adapter / Runtime Modernization 的边界 |
-| `src/electronapp/preload.js` 的通用 IPC 暴露 | `preload.js:1-14` 暴露 `window.ipc`、`window.fs` 和 diagnostics；`resolvers/cd2-resolver.js` 使用 `window.ipc.invoke/send` 进行 CD2 | KEEP。不能因为旧 `mpvPosEvent` 删除整个 preload 或整个 `window.ipc` |
+| `src/electronapp/preload.js` 的通用 IPC 暴露 | `preload.js:1-14` 暴露 `window.ipc`、`window.fs` 和 diagnostics；`resolvers/cd2-resolver.js` 使用 `window.ipc.invoke/send` 进行 CD2 | KEEP。Batch 2 只删除 dead channel，generic `window.ipc` 继续保留 |
 | CD2、DirectUrl、Mount、STRM resolver | `src/electronapp/resolvers/*`、`src/electronapp/enhanced/*`；当前文档记录了 fallback、generation、mapping 和 header 隔离 | KEEP。属于当前 Foundation，不能与 External Player 一起清理 |
 | Session / `remoteplayer` / WebSocket / input API / reports | `www/modules/sessionplayer.js`、`www/modules/common/input/api.js` 以及 `docs/SESSION_CONTROL.md`；现有真实控制证据通过 | KEEP。remoteplayer 是 Emby Session 控制，不是旧 mpv named pipe |
-| `electronapphost` 总协议和 `apphost.js` | `src/electronapp/apphost.js:17-23,99-117`；`main.js:228-309` 还承载 window state、sleep、shutdown、openurl、video/audio lock 和 loaded | KEEP。仅可拆除其中已证明没有调用者的 shell process case |
+| `electronapphost` 总协议和 `apphost.js` | `src/electronapp/apphost.js:17-23,99-117`；`main.js` 仍承载 window state、sleep、shutdown、openurl、video/audio lock、loaded 和 CEC | KEEP。Batch 2 只删除已证明无调用者的 shell process cases |
 | `shell.openUrl` | `src/electronapp/shell.js:69-71`；IAP、metadata editor、registration services、通用 `emby-button` 均调用 | KEEP。它是 shared shell 能力 |
 | CEC 插件和输入映射 | `src/electronapp/plugins/cec.js:1-44`、`src/electronapp/cec/cec.js`、`command-map.js`；默认插件目录加载会触发启动 | KEEP。CEC 可以另行设计独立开关，但本轮无删除依据 |
 | 构建 provenance、readiness harness、诊断和测试工具 | `tools/runtime-provenance.cjs`、`tests/readiness-acceptance.ps1`、`src/electronapp/enhanced/diagnostics.js` | KEEP。它们是验证边界和回归证据，不是产品死代码 |
@@ -87,37 +103,32 @@ Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` �
 
 - `externalplayer.html`、`externalplayers.html`、`externalplayer.js`、`externalplayers.js` 和 module locale 已随 `REMOVED-01` 删除。
 - 旧 plugin 的 `getRoutes`、controller path 和 `pluginManager.mapRoute("externalplayer", ...)` 只存在于已删除模块的自引用中。
-- shared `www/strings` locale、settings/playback、item autoplay 和 PlaybackManager guard 未在 Batch 1 删除，分别保留到 Batch 2/UNKNOWN。
+- shared `www/strings` locale、settings/playback、item autoplay 和 PlaybackManager guard 未在 Batch 1 删除，继续保留到后续 UI/shared cleanup。
 
 判定：**REMOVED**。剩余同名文本不形成指向已删除模块的可解析 runtime path。
 
-## REMAINING DELETE CANDIDATE
+## REMOVED — Cleanup Batch 2
 
-以下是 Batch 1 后仍存在、但按任务边界没有删除的候选。
+### REMOVED-03 — `mpvPosEvent` / named pipe 进度辅助
 
-### DC-02 — `mpvPosEvent` / named pipe 进度辅助（保留）
+- 原 producer/entry 是 `src/electronapp/main.js` 的 `net.Socket`、`ipcMain.handle('mpvPosEvent')`、Windows/POSIX named pipe、playback-time timer 和 `webContents.send('mpvPos', ...)`。
+- 唯一旧 consumer 是已从 fresh runtime 排除的 External Player plugin；当前维护产品代码没有该 channel、socket path 或回传 consumer。
+- 删除只移除了 specific dead channel；`preload.js` 的 `window.ipc`、CD2 resolve/cancel 和 diagnostics IPC 保持不变。
 
-- producer/entry：`src/electronapp/main.js:21-65` 创建 `net.Socket`，注册 `ipcMain.handle('mpvPosEvent')`，连接 Windows `\\.\pipe\tmp\mpv-socket` 或 POSIX `/tmp/mpv-socket`，定时发送 `get_property playback-time`，再以 `webContents.send('mpvPos', ...)` 回传。
-- 历史 consumer 位于已删除 External Player plugin；当前全局 `rg` 未发现其它 `mpvPosEvent`、`mpvPos` 或 `mpv-socket` consumer。`preload.js` 的 `window.ipc` 是 generic bridge，当前仍被 CD2 使用。
-- 当前没有产品入口触发该 handler；它与外置 mpv 的 `--input-ipc-server=/tmp/mpv-socket` 配置属于同一条旧链。
+判定：**REMOVED**。vendor 原件中的旧文本仍按只读来源保留。
 
-判定：**REMAINS / DELETE CANDIDATE，保留到 Batch 2**。本轮明确未改 main process IPC。
+### REMOVED-04 — Shell 的外置进程切片
 
-### DC-03 — Shell 的外置进程切片
+- `src/electronapp/shell.js` 现在只保留 `shell.openUrl` 与 `electronapphost://openurl` request contract。
+- `shell.canExec`、`shell.exec`、`shell.close`、`getProcessClosePromise`、`onChildProcessClosed`、`shellstart`、`shellclose`、`processes`、`startProcess`、`closeProcess` 和旧 `execFile` callback chain 已删除。
+- 同一 `electronapphost` dispatcher 的 window state、sleep/shutdown、audio/video lock、loaded 和 CEC command cases 保持不变。
+- `main.js` 的 `child_process.exec('notepad.exe ...')` 仍是 Anime4K 配置辅助，不属于本批删除的 external process chain。
 
-静态 consumer 表明可拆除的不是整个 `shell.js`，而是以下 process-only contract：
+判定：**REMOVED**。`shell.openUrl` 的 4 类活动 Web consumer 和浏览器 fallback 未被改动。
 
-| 位置 | 证据 | 候选动作 |
-|---|---|---|
-| `src/electronapp/shell.js:73` `shell.canExec` | 只在已删除的旧 plugin 中读取 | 保留到 Batch 2，确认 contract 后移除 |
-| `src/electronapp/shell.js:82-100` `shell.exec` | 只在已删除的旧 plugin 中调用 | 保留到 Batch 2；必须保留 `openUrl` |
-| `src/electronapp/shell.js:75-80` `shell.close` | 当前文本 consumer 为 0 | 保留到 Batch 2，单独验证 |
-| `src/electronapp/main.js:271-279` | `shellstart` / `shellclose` 转给 process helper | 本轮不改，保留其它 `electronapphost` command |
-| `src/electronapp/main.js:378-412` | `processes`、`startProcess`、`closeProcess` 只服务 `shellstart/close` | 本轮不改 |
-| `src/electronapp/shell.js:25-52` | `getProcessClosePromise`、`closed` event、`onChildProcessClosed` 只支持 `exec` | 本轮不改 |
+## REMAINING DELETE CANDIDATE（Batch 2 后）
 
-判定：**REMAINS / DELETE CANDIDATE，保留到 Batch 2**；它属于 shared module split，不能在本轮前端清理中顺带删除。
-保留：`shell.openUrl`、`electronapphost://openurl`、apphost window/audio/video/sleep 能力。`main.js:348-375` 的 `child_process.exec('notepad.exe ...')` 是 Anime4K 配置辅助，不是 `shell.exec`，应单独处理。
+以下是本批之后仍存在、但按任务边界没有删除的候选。
 
 ### DC-04 — Shared settings/locale residue（保留）
 
@@ -127,7 +138,7 @@ Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` �
 - `src/electronapp/www/modules/emby-elements/emby-checkbox/emby-checkbox.css:167-182` 的 `ExternalPlayerSwitch` selector 只在该 CSS 中找到，没有当前 HTML class consumer。
 - 50 个 `www/strings` locale 文件仍有 `HeaderSelectExternalPlayer` / `HeaderExternalPlayerPlayback`；43 个文件仍有 `EnableExternalVideoPlayers` / `EnableExternalVideoPlayersHelp`。这些是共享 locale bundle 中的 key，不应在没有 key-level 回归前按整个文件删除。
 
-判定：模块专属 route/controller/locale **REMOVED**；共享 locale key 与 CSS 仍是 **REMAINS / 条件候选**，放 Batch 2，先完成 settings/autoplay 回归。
+判定：模块专属 route/controller/locale **REMOVED**；共享 locale key 与 CSS 仍是 **REMAINS / 条件候选**，放后续 UI/shared cleanup，先完成 settings/autoplay 回归。
 
 ### DC-05 — 旧 root helper 的 packaging exclusion（保留）
 
@@ -136,7 +147,7 @@ Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` �
 - 两者都位于 Carnival root，`tools/build.ps1:27` 全量复制，因此会进入 runtime；`installer/EmbyTheaterEnhanced.iss:32-33` 又递归打包。
 - 当前 Electron/Enhanced 源码没有调用者；脚本内容是旧配置/权限/缓存/Anime4K/SVP/卸载菜单，其中 Configure 脚本还包含递归删除用户目录和旧应用目录的动作。
 
-判定：**REMAINS / DELETE CANDIDATE，保留到 Batch 2/3**。由于脚本可能被旧用户手工使用，本轮不改变 payload；未来若排除，仍应只改 Enhanced packaging，不修改或运行 vendor 原件。
+判定：**REMAINS / DELETE CANDIDATE，保留到后续批次**。由于脚本可能被旧用户手工使用，本轮不改变 payload；未来若排除，仍应只改 Enhanced packaging，不修改或运行 vendor 原件。
 
 ## DEFER
 
@@ -158,7 +169,7 @@ Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` �
 
 `www/modules/common/playback/playbackmanager.js:912-914` 跳过 externalplayer 的停止上报，`:1413-1414` 跳过 externalplayer 的进度 timer；`modules/playback/playbackorientation.js` 也检查 `isExternalPlayer`。这些条件在外置播放器真正删除后可能变成可清理分支，但它们位于 PlaybackManager 的 Session、报告和控制路径，不能放入“只删 payload”的低风险操作。
 
-判定：DELETE CANDIDATE 的后续子项，但 **DEFER 到 Cleanup Batch 2**，待 main/helper residue 一并评估，并继续完成普通播放、STRM、NextTrack、Stop、Session/report 和远控回归后再改。
+判定：DELETE CANDIDATE 的后续子项，但 **DEFER 到后续 UI/shared cleanup**，继续完成普通播放、STRM、NextTrack、Stop、Session/report 和远控回归后再改。
 
 ### D-04 — CEC 的独立禁用设计
 
@@ -235,17 +246,17 @@ vendor 中的旧 plugin（只读基线；fresh Enhanced runtime 排除）
     └─ getRoutes → externalplayer.html / externalplayers.html + controllers
 ```
 
-Batch 1 后，当前可维护 snapshot 和 fresh runtime 都没有该 plugin 文件或 route；Electron registration 由 tracked build-time patch 在 source/vendor 两种输入上统一关闭。vendor 中的旧文本仅作为只读来源保留，旧 chain 的 main-process/helper 部分没有在本轮删除。
+Batch 1 后，当前可维护 snapshot 和 fresh runtime 都没有该 plugin 文件或 route；Electron registration 由 tracked build-time patch 在 source/vendor 两种输入上统一关闭。Batch 2 又删除了维护产品代码中的 main-process/helper process chain；vendor 中的旧文本仅作为只读来源保留。
 
 ### 共享依赖拆分
 
 | 能力 | External Player 旧用途 | 当前其它用途 | 分类 |
 |---|---|---|---|
-| `shell.exec/canExec/close` | 启动/跟踪外部 exe | 未发现其它当前 consumer；旧 plugin 已删除 | REMAINS，Batch 2 |
+| `shell.exec/canExec/close` | 启动/跟踪外部 exe | 未发现其它当前 consumer；旧 plugin 已删除 | REMOVED，Batch 2 |
 | `shell.openUrl` | 旧 shell module 的一部分 | IAP、metadata、registration、通用链接按钮 | KEEP |
-| `window.ipc` | mpvPosEvent、mpvPos | CD2 resolve/cancel、diagnostics preload | KEEP；只删旧 channel |
+| `window.ipc` | 旧 mpvPosEvent、mpvPos channel | CD2 resolve/cancel、diagnostics preload | KEEP；只删 dead channel |
 | `window.fs` / filesystem abstraction | 外置字幕与播放器路径检查 | 其它 web/runtime 文件能力和 Mount 边界 | KEEP/UNKNOWN；不随外置模块整体删除 |
-| `PlaybackManager` external id 分支 | 外置 player 上报/进度例外 | 正常 Session/报告链仍使用同一文件 | DEFER，Batch 2 |
+| `PlaybackManager` external id 分支 | 外置 player 上报/进度例外 | 正常 Session/报告链仍使用同一文件 | DEFER，后续 UI/shared cleanup |
 
 ## CEC
 
@@ -274,25 +285,25 @@ CEC 当前是实际可到达的 optional feature：
 | Method/入口 | 当前 consumer | 结论 |
 |---|---|---|
 | `shell.openUrl` | `www/modules/iap.js`、`metadataeditor/metadataeditor.js`、`registrationservices/registrationservices.js`、`emby-elements/emby-button/emby-button.js` | KEEP |
-| `shell.exec` | 仅已删除的旧 `www/modules/externalplayer/plugin.js` 使用 | REMAINS，Batch 2 |
-| `shell.canExec` | 仅已删除的旧 plugin `getPlayer()` 使用 | REMAINS，Batch 2 |
-| `shell.close` | 当前文本 consumer 为 0 | DELETE CANDIDATE，随 contract split |
-| `electronapphost://shellstart` / `shellclose` | 只被上述已删除 process slice 生成的 URL 使用 | REMAINS，Batch 2；保留协议其它 command |
+| `shell.exec` | 仅已删除的旧 `www/modules/externalplayer/plugin.js` 使用 | REMOVED，Batch 2 |
+| `shell.canExec` | 仅已删除的旧 plugin `getPlayer()` 使用 | REMOVED，Batch 2 |
+| `shell.close` | 当前文本 consumer 为 0 | REMOVED，Batch 2 |
+| `electronapphost://shellstart` / `shellclose` | 只被上述已删除 process slice 生成的 URL 使用 | REMOVED，保留协议其它 command |
 | main `child_process.exec` | Anime4K 配置弹窗打开 notepad；`main.js:348-375` | 独立 optional legacy，UNKNOWN/DEFER，不与 `shell.exec` 合并判死 |
 
-不要使用“发现 `exec` 就全部删除”的规则：`shell.exec`、main process 的 `child_process.exec` 和 `execFile` 是三条不同关系；前两者分别属于 external process shell 与 Anime4K helper，最后一个是旧播放器启动。
+不要使用“发现 `exec` 就全部删除”的规则：本批删除的是 Electron custom shell 的 process-only contract；main process 的 `child_process.exec('notepad.exe ...')` 仍是 Anime4K helper，CEC/refresh-rate 也各自保留独立的 process path。vendor 中的旧 `execFile` 文本仅是只读来源。
 
 ## IPC / Named Pipe
 
 | 角色 | 当前事实 | 分类 |
 |---|---|---|
-| Legacy producer | `main.js:21-38` socket data → `mpvPos`，`main.js:41-65` handler/timer | DELETE CANDIDATE |
-| Legacy consumer | 原 consumer 随 External Player frontend/plugin 一起删除；当前 consumer 为 0 | REMAINS，Batch 2 再删 producer |
+| Legacy producer | 原 `main.js` 的 socket data → `mpvPos`、`mpvPosEvent` handler/timer | REMOVED，Batch 2 |
+| Legacy consumer | 原 consumer 随 External Player frontend/plugin 一起删除；当前 consumer 为 0 | REMOVED |
 | IPC bridge | `preload.js:1-2` exposes `ipcRenderer` as `window.ipc` | KEEP, CD2 shared |
 | Active IPC | `enhanced/cd2-ipc.js` handles `enhanced-cd2-resolve` and cancel; diagnostics uses `enhanced-diagnostics` | KEEP |
 | Remote player | `sessionplayer.js` + Emby SessionEvents/WebSocket | KEEP, not named pipe |
 
-`mpvPosEvent` 的 entry point 仍被 main process 注册；Batch 1 只删除了它的前端 consumer，故 channel 仍然存在，不能写成已完全清理。generic preload IPC 必须保留。
+`mpvPosEvent`、`mpvPos` 和 named pipe entry point 已从维护产品代码和 fresh runtime 删除。generic preload IPC 仍由 CD2/diagnostics 使用，不能整体删除。
 
 ## Settings / Routes
 
@@ -300,14 +311,14 @@ CEC 当前是实际可到达的 optional feature：
 |---|---|---|
 | `externalplayer/plugin.js:getRoutes` | plugin 文件已物理删除；旧 route 不再进入 fresh runtime | REMOVED |
 | `externalplayer.html` / `externalplayers.html` + controllers | 文件已随 frontend/plugin layer 删除 | REMOVED |
-| `settings/playback.html:92-100` | `.fldExternalPlayer` 字段仍在，但默认隐藏 | Batch 2 条件候选 |
-| `settings/playback.js:131-152,198-206` | `externalplayerintent` 不在 apphost feature list；get/set 仍读写历史值 | UNKNOWN/Batch 2 |
+| `settings/playback.html:92-100` | `.fldExternalPlayer` 字段仍在，但默认隐藏 | 后续 UI/shared 条件候选 |
+| `settings/playback.js:131-152,198-206` | `externalplayerintent` 不在 apphost feature list；get/set 仍读写历史值 | UNKNOWN，后续 UI/shared |
 | `modules/common/appsettings.js:102-105` | `enableSystemExternalPlayers` API 仍存在 | UNKNOWN，先处理 item/settings contract |
 | `item/item.js:707-718` | `externalplayers` 参与 `.btnAutoPlay` 显示 | UNKNOWN，不能只按文件名删除 |
 | `item/item.js:2299-2312,2904` | autoplay button 会切换 `autoplay`；文案仍带旧外置播放器字样 | DEFER，需 UI/产品语义确认 |
-| `playbackmanager.js:912-914,1413-1414` | external player id 的报告/进度例外 | DEFER，Batch 2 |
+| `playbackmanager.js:912-914,1413-1414` | external player id 的报告/进度例外 | DEFER，后续 UI/shared cleanup |
 | `emby-checkbox.css:167-182` | ExternalPlayerSwitch selector 未找到当前 markup consumer | DELETE CANDIDATE，视觉回归后处理 |
-| shared locale JSON | 外置播放器 key 分散在语言包 | Batch 2 key-level cleanup，不删除整个 locale 文件 |
+| shared locale JSON | 外置播放器 key 分散在语言包 | 后续 key-level cleanup，不删除整个 locale 文件 |
 
 不要删除或迁移用户现有 `externalplayers` / `enableSystemExternalPlayers` storage 值作为本轮副作用。它们是否需要数据迁移必须单独确认。
 
@@ -373,19 +384,21 @@ Windows only 是 near-term product priority，不是删除所有非 Windows 分�
 
 Batch 1 不包含：`mpvPosEvent`、named pipe、main-process external-player IPC、shell external-process branch、`external/`、vendor helper、CEC core、`preload.js`、`electronapphost` 总协议、PlaybackManager、Session/remoteplayer、resolver/CD2/Mount/DirectUrl、Pepper/libmpv、平台分支和用户配置迁移。
 
-## Cleanup Batch 2
+## Cleanup Batch 2 — Completed
 
-目标：中风险的 UI/共享 contract 清理。
+目标：在不改变 PlaybackManager、Session、remote control、CEC 和 generic IPC contract 的前提下，移除已无 consumer 的 External Player host/process surface。
 
-建议在 Batch 1 通过后处理：
+实际完成：
 
-- `settings/playback.js/html` 中隐藏的 external player field、`enableSystemExternalPlayers` API 和对应 locale key。
-- `item.js` 对 `externalplayers` 的 autoplay visibility gate、旧文案和相关 CSS；先确定它是否已经是普通连播功能。
-- `playbackmanager.js` 的 external player id report/progress guards 与 `playbackorientation.js` 的 `isExternalPlayer` 条件。
-- CEC settings route 与 shell/host boundaries 的局部整理，但不改变 CEC 默认行为。
-- `main.js` Anime4K config helper、`external/` optional preset 的独立 policy；需要用户选择和配置回归。
+1. 删除 `main.js` 的 `mpvPosEvent` handler、`mpvPos` 回传、named pipe socket、polling timer 和 cleanup chain。
+2. 删除 `shell.js` 的 `canExec`、`exec`、`close`、process-close event helpers 及其 `shellstart/shellclose` URL 生成。
+3. 删除 `main.js` 的 `shellstart/shellclose` protocol cases、`processes` map、`startProcess/closeProcess` 和旧 `execFile` callback chain。
+4. 保留 `shell.openUrl`、`electronapphost://openurl`、其它 active host commands、generic `window.ipc`、CD2/diagnostics、CEC、Anime4K helper、libmpv、resolver、PlaybackManager、Session 和 remote control。
+5. 新增 `tests/external-player-process-chain.test.cjs`，覆盖 dead channel/helper absence、`shell.openUrl` protocol request、CD2 trusted IPC 和 Anime4K/CEC preservation；未引入新测试框架。
 
-必须覆盖普通视频、STRM native/CD2/Mount fallback、Transcode protection、NextTrack、Stop、Session/report、remote control、settings save/load、`shell.openUrl` 和 CEC 启动。
+Batch 2 后，`settings/playback`、item autoplay、PlaybackManager external-player guards、shared locale/CSS、`external/` 和 vendor helper 仍未处理。它们留给后续独立批次，并需要各自的 UI/Session/配置回归。
+
+必须覆盖并已执行：普通/STRM bounded playback 主链、Pause/Seek/Resume/NextTrack/Stop、Session/reporting、remote control、`shell.openUrl` targeted smoke 和 CEC/Anime4K preservation check。
 
 ## Cleanup Batch 3
 
@@ -419,6 +432,16 @@ Batch 3 需要独立的许可/来源、host、安装包和跨平台证据，不�
 5. stale ignored app.js portability build：registration 关闭、frontend directory 不存在、Android branch 保留、provenance/package verify PASS，source sentinel/app state 已恢复。
 6. JavaScript syntax：454 files PASS；PowerShell syntax：11 files PASS；`git diff --check` PASS。main IPC、shell process slice、CEC、external/、vendor helper 和历史文档未在 Batch 1 改动。
 
+### Batch 2 Verification Record
+
+1. `npm test`：67/67 PASS；其中 `tests/external-player-process-chain.test.cjs` 5/5 PASS。
+2. JavaScript syntax：455 files PASS；PowerShell syntax：11 files PASS；`git diff --check`：PASS。
+3. fresh runtime `EmbyTheaterEnhanced-0.1.1-batch2-process-chain-65d97da`：runtime provenance PASS（779 product-scope entries），`package.ps1 -VerifyOnly` PASS（2,116 payload files）。
+4. runtime `electronapp` 下 `mpvPosEvent`、`mpvPos`、`mpv-socket`、`shellstart`、`shellclose`、`startProcess`、`closeProcess` 和 `onChildProcessClosed` active references：0。
+5. `shell.openUrl` targeted smoke：PASS，仍生成 `GET electronapphost://openurl?url=...`；main `openurl` dispatch 与其它 active host commands 保持。
+6. generic IPC/CD2、diagnostics、CEC、Anime4K helper、libmpv、resolver、PlaybackManager 和 `sessionplayer.js` 均存在；vendor 原件未修改。
+7. 唯一一次 bounded real acceptance：inspect/select/play/pause/seek/resume/next/stop、Pepper-ready、resolver-result、manager-play-resolved、Session/reporting、cleanup 和 residual gates 全部通过；runner `completed`、`timedOut=false`、`cleanup=verified-clean`、residual owned processes=0。`loadfileObservation=unavailable` 仍是既有 observability gap。
+
 ## Final Audit Summary
 
 ```text
@@ -438,10 +461,11 @@ KEEP:
 REMOVED:
 - External Player frontend/plugin module, route/controllers and module locales (41 files)
 - Disabled Electron registration remnant in current ignored Web snapshot; tracked build-time patch now enforces the same result on stale/vendor fallback input
+- `mpvPosEvent` / `mpvPos` / `mpv-socket` main-process chain
+- Electron custom shell process-only methods and close-event helpers
+- `electronapphost://shellstart` / `shellclose` dispatch plus `startProcess` / `closeProcess` process map/helper chain
 
 DELETE CANDIDATE:
-- main mpvPosEvent / mpv-socket producer and unreachable legacy consumer
-- shell process-only exec/canExec/close plus shellstart/shellclose helper slice
 - shared external-player settings/locale residue and unused CSS selector
 - old root BAT helpers as Enhanced payload exclusion, pending manual workflow confirmation
 
@@ -460,9 +484,9 @@ UNKNOWN:
 
 External Player:
 - current registration: tracked build-time patch disables the Electron registration; fresh runtime contains no External Player frontend path regardless of ignored snapshot state
-- remaining files: shared settings/locale residue only; vendor baseline remains read-only
-- shared dependencies: shell.openUrl, generic preload IPC, filesystem, PlaybackManager guards
-- deletion readiness: frontend/plugin layer REMOVED; main/helper and shared settings residue remains
+- remaining product residue: settings/autoplay, PlaybackManager guards, shared locale/CSS and `external/`; vendor baseline remains read-only
+- preserved shared dependencies: shell.openUrl, generic preload IPC, filesystem, PlaybackManager/session chain and CEC
+- deletion readiness: frontend/plugin layer and host/process-control chain REMOVED; shared semantic residue remains
 
 CEC:
 - current status: default top-level plugin load attempts electroncec initialization; runtime path is real
@@ -470,11 +494,11 @@ CEC:
 
 Shell / Exec:
 - shared consumers: shell.openUrl in four active Web modules; electronapphost has broader consumers
-- recommendation: retain shell module/openUrl, split only external process methods
+- status: shell process-only contract REMOVED; retain shell module/openUrl and active host protocol commands
 
 IPC / Named Pipe:
 - active: CD2 IPC, diagnostics IPC, Session/WebSocket control
-- dead candidates: mpvPosEvent, mpvPos and mpv-socket chain
+- status: mpvPosEvent, mpvPos and mpv-socket chain REMOVED
 
 Settings / Routes:
 - removed: external player module routes/controllers; remaining: hidden external-only field/style/key after semantics check
@@ -486,11 +510,9 @@ Packaging residue:
 - old root BAT 2 files / about 13.9 KB
 
 Top low-risk cleanup targets:
-1. Audit/remove mpvPosEvent/named-pipe helper chain
-2. Split shell process methods from shared openUrl
-3. Resolve shared external-player settings/autoplay semantics
-4. Audit old root BAT helpers and external/ payload policy
-5. Review CEC aliases and driver payload with host evidence
+1. Resolve shared external-player settings/autoplay semantics
+2. Audit old root BAT helpers and external/ payload policy
+3. Review CEC aliases and driver payload with host evidence
 
 Items explicitly NOT safe to delete:
 PlaybackManager, embedded libmpv/Pepper bridge, Session/remoteplayer, resolver/CD2/DirectUrl/Mount,
@@ -498,7 +520,10 @@ preload diagnostics, readiness/provenance tooling, CEC core, electronapphost, sh
 vendor originals and user settings data
 
 Recommended Cleanup Batch 1:
-Completed: External Player frontend/plugin payload and current registration remnant removed; main/helper residue remains
+Completed: External Player frontend/plugin payload and current registration remnant removed; at that time main/helper residue remained and was handled by the completed Batch 2 process-control cleanup
+
+Cleanup Batch 2 process-control chain:
+Completed: `mpvPosEvent`/named-pipe, Electron custom shell process methods, `shellstart`/`shellclose` and `startProcess`/`closeProcess` removed; `shell.openUrl` and active IPC/host commands preserved
 
 Recommended regression for Batch 1:
 npm test, static channel/reference scan, fresh runtime provenance/payload check, isolated Electron plugin/playback/session/control smoke
