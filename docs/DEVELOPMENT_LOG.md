@@ -1,5 +1,24 @@
 # 开发日志
 
+## 2026-09-14 — Pepper ready listener race follow-up
+
+本轮在 `fix/pepper-ready-listener-race` 上执行，基于 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`。上一轮诊断 harness/doc 资产已先独立保留为 `ef34827378805e7a80ea0f73e1f5bbf2ddbf9314`；本轮不混入临时 instrumentation。
+
+重新核对 `src/electronapp/plugins/libmpv.js` 后确认旧顺序为：创建 embed → 注册 embed `message` listener → attach 到 dialog → 设置 `libmpv` → 注册 window `ready` listener。由于 Pepper 可能在 attach 同步窗口发出 `{type:'ready'}`，旧顺序存在 listener-after-attach race。修复后顺序为：创建 embed → 注册 message listener → 设置 `libmpv` → 注册 window authoritative `ready` listener → attach 到 dialog。embed 属性、`application/x-mpvjs`、DOM parent、ready callback、`enhancedDiagnostics(libmpv, 'ready')`、player reuse、stop/destroy 和 message handling 均保持不变；listener 仍使用 `{once:true}`，没有新增 retry、sleep、timeout 或轮询。
+
+新增 `tests/pepper-ready-listener-race.test.cjs`，使用实际 `libmpv.js` AMD factory、最小 fake DOM/event target，并让 fake Pepper 在 `insertBefore(embed)` 的同步调用内立即发 ready。旧顺序测试会超时，修复后证明 ready 被捕获、`play()` 收束、authoritative ready callback 只执行一次；npm 全量测试为 57/57。初始化区其它首次消息 listener 没有发现同类 attach 后注册风险：embed `message` listener 已在 attach 前，`core-playing` listener 在 `playInternal/loadfile` 前。
+
+按本分支 HEAD 构建 `dist/EmbyTheaterEnhanced-0.1.1-pepper-ready-race-731dc2a`，full runtime provenance 820/820 通过。唯一一次真实 acceptance 使用 `inspect,select,play,stop`，结果为 inspect PASS、select PASS、isStrm=true、unique embed=1、Pepper ready observed、resolver-result observed、manager-play-resolved observed、classification success、cleanup verified-clean、residual=0。timing 为 `play→embed=4724ms`、`embed→Pepper ready=22ms`，仅作为回归证据，不宣称性能改善；`loadfileObservation=unavailable` 仍是既有 observability gap。
+
+本轮仍保留 `ROOT CAUSE NOT YET CONFIRMED`。本修复只关闭静态极早 ready 丢失风险，不能宣称已经确认历史 20–30 秒 readiness 长尾的根因。
+
+Model Tier: 2
+Model: current Codex session
+Reason: the change is small but touches libmpv/Pepper event ordering and requires a synchronous fake-plugin behavior test plus one real acceptance
+Escalated: no
+
+提交：`731dc2ad5ca4898475a5e641b6975563f9cf8c74`，消息为 `fix: register Pepper ready listener before attach`。未 push、未 merge。
+
 ## 2026-09-14 — Pepper readiness 抖动诊断
 
 本轮按用户任务只做 Foundation / Pepper readiness diagnosis。基线为 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`，产品 `src/electronapp`、PlaybackManager、libmpv、preload、main、resolver、CD2、DirectUrl、服务器和用户播放器配置均未修改；没有提交、推送或发布。

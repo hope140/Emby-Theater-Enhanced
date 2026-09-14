@@ -67,3 +67,9 @@
 | C | 4535ms | 4ms | ≈0ms（raw -1） | 3ms | 2268ms |
 
 三次的 resolver-result 均在 ready 后 4–5ms 出现；没有证据将 PR4/DirectUrl/resolver 与 Pepper ready 延迟关联。`loadfileObservation=unavailable` 仍是 acceptance-only outgoing command 观测缺口。结论为 `ROOT CAUSE NOT YET CONFIRMED`，主要抖动位于 embed 前置的 PlaybackManager/player 链，精确子阶段尚未观测；产品代码没有修改。
+
+## 2026-09-14 — Pepper ready listener race follow-up
+
+分支 `fix/pepper-ready-listener-race` 的产品修复 commit 为 `731dc2ad5ca4898475a5e641b6975563f9cf8c74`。按该 commit 构建新 runtime 后只执行一次 `inspect,select,play,stop`，结果为 inspect PASS、select PASS、isStrm=true、unique embed=1、Pepper ready、resolver-result、manager-play-resolved 和 classification success；runner completed、cleanup verified-clean、residual=0。
+
+本次 timing 为 `play→embed=4724ms`、`embed→Pepper ready=22ms`。它只证明 listener 顺序修复没有破坏当前播放链，不证明性能改善，也不改变历史 `ROOT CAUSE NOT YET CONFIRMED` 结论。`loadfileObservation=unavailable` 继续作为 observability gap。

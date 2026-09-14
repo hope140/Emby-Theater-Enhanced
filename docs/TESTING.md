@@ -182,3 +182,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.p
 ```
 
 将 `RunPrefix` 改为 `readiness-B`、`readiness-C`，其余参数不变。三次均 provenance=passed、acceptance=success、runner=completed、cleanup=verified-clean、residual=0。observer 额外记录 embed creation observation、attached/disconnected、unique count、recreation/duplicate 以及 lifecycle timing；不修改产品 instrumentation。核心结论是 `play→embed=4535–5996ms`、`embed→authoritative ready=2–3ms`，所以当前只能确认主要抖动在 embed 前置层，不能确认其单一根因。loadfile outgoing 仍为 `unavailable` observability gap，不作为 gate。完整脱敏结果见 `docs/PEPPER_READINESS_DIAGNOSIS.md`。
+
+## 2026-09-14 Pepper ready listener race follow-up
+
+在 `fix/pepper-ready-listener-race@731dc2a` 上执行：
+
+```powershell
+node --test tests/pepper-ready-listener-race.test.cjs
+```
+
+该行为测试让 fake Pepper 在 embed attach 的同步调用内发出 ready，验证 ready 被捕获且 callback 只执行一次。旧顺序会超时，修复后 PASS。全量 `npm test` 为 57/57。按本分支 HEAD 构建的 runtime provenance 通过（820/820），唯一真实 acceptance 的主链和 exact-root cleanup 通过；timing `play→embed=4724ms`、`embed→Pepper ready=22ms` 仅用于回归，不作为性能结论。历史 readiness root cause 仍未确认。

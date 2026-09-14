@@ -122,3 +122,11 @@ ROOT CAUSE NOT YET CONFIRMED
 下一步最小实验：在 acceptance-only flow 中只增加已存在产品边界的 player/route/API 时间点，优先区分 `manager.play → player.play`、`player.play → showVideoOsd/displaySync` 和 `displaySync → embed attach`。如果不允许产品 instrumentation，则保持当前结论，不把前置层进一步猜成 DLL、Chromium 或服务器原因。
 
 Product code modified: NO.
+
+## 2026-09-14 listener race follow-up
+
+基于本诊断结论，分支 `fix/pepper-ready-listener-race` 只修复一个静态风险。`libmpv.js` 现在在 `dlg.insertBefore(embed, ...)` 前完成 `libmpv=embed` 和 window `ready` listener 注册；embed `message` listener 原本已在 attach 前，其他初始化语义保持不变。
+
+行为型 fake-DOM 测试让 Pepper 在 attach 的同步调用内立即发送 ready。旧顺序下 `play()` 会等待不收束，修复后 ready 被捕获且 authoritative callback 只执行一次。一次真实 acceptance 使用新 runtime 通过，`play→embed=4724ms`、`embed→Pepper ready=22ms`；该单次 timing 只作回归证据，不作性能结论。
+
+本 follow-up 仍不确认历史 20–30 秒 readiness 长尾的根因。它关闭的是 listener-after-attach 的极早 ready 丢失风险，不等同于确认 PPAPI、DLL、PlaybackManager 前置链或其它层的历史根因。
