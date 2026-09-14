@@ -1,5 +1,22 @@
 # 开发日志
 
+## 2026-09-14 — External Player frontend cleanup Batch 1
+
+从 Audit commit `fb434e57f2cca065c784e0551c651ef57d1a2634` 创建 `cleanup/external-player-frontend`，提交 `adc8758902a580cc3bc7fc33bfb10a6b422c828d`，消息为 `cleanup: remove dead external player frontend`。本轮按 contract 只清理前端/plugin 表层：物理删除本地 ignored Web snapshot 中 `www/modules/externalplayer/**` 的 41 个文件；在 `tools/build.ps1` 增加纯 External Player runtime exclusion，避免 vendor 全量复制把它重新带入新 runtime；删除直接读取该 plugin 文件的 obsolete 单测。没有修改 main.js、mpvPosEvent、named pipe、shell、shell.openUrl、CEC、Pepper/PPAPI、libmpv、PlaybackManager、remoteplayer、Session、resolver、CD2、DirectUrl、Mount、preload、external/、vendor helper 或用户设置。
+
+删除前重新追踪了 registration、AMD require、route/controller、自引用和 package copy rule。删除后剩余 `externalplayer` 命中逐项归类为 Android 平台分支、Batch 2 settings/autoplay/PlaybackManager guard、负向 smoke 断言或合法 build exclusion，没有失效的 `www/modules/externalplayer` runtime path。vendor/carnival 原件仍保留 41 个文件且未修改。
+
+验证 runtime 为 `dist/EmbyTheaterEnhanced-0.1.1-batch1-after-cleanup-adc8758`：provenance PASS（779 scope entries）、payload verify PASS（2,116 files）、删除路径 0 entries；npm test 56/56，451 个 JS syntax、11 个 PowerShell syntax、git diff --check 全部通过。对照 runtime 2,158 files / 389,112,766 bytes，清理后 2,117 files / 389,008,884 bytes，减少 41 files / 103,882 bytes；本地 source size 减少 77,725 bytes。
+
+唯一一次 bounded real acceptance 使用 `inspect,select,play,pause,seek,resume,stop`，全部 PASS，`strm=true`，Pepper-ready/resolver-result/manager-play-resolved 均 observed，Session/reporting 正常，runner completed、cleanup verified-clean、residual=0。`loadfileObservation=unavailable` 保持既有 observability gap，不作为本轮 gate。
+
+准确状态：External Player frontend/plugin layer removed；main-process/helper residue remains for Batch 2 audit/removal。未 push、未 merge、未开始 Batch 2。
+
+Model Tier: 1
+Model: current Codex session
+Reason: the requested deletion was narrow and the cross-module contract was fixed; only frontend payload/build exclusion and an obsolete direct-load test were in scope
+Escalated: no
+
 ## 2026-09-14 — Foundation legacy audit
 
 本轮按任务书在 `main@c873913ea1a2716e048e785fa2fd83294dd091b5` 上执行 Foundation Cleanup / Legacy Audit。范围限定为审计、分类和可执行清单，不删除产品代码、不修改播放架构、不运行 Carnival 或综合补丁安装/恢复脚本、不执行真实 Emby acceptance、不提交或推送。
