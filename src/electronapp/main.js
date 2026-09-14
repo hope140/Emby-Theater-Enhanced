@@ -18,51 +18,7 @@
     var previousBounds;
     var cecProcess;
     var sleepLock = 0;
-    var net = require('net');
-    var mpvSocket = new net.Socket();
-    var triggerMpv = false;
-    var mpvIntervalId = null;
-
-    mpvSocket.on('data', function (data) {
-        if(triggerMpv){
-            var json;
-            try{
-                json = JSON.parse(data.toString());
-            }catch{
-                return;
-            }
-            if(json.request_id == 2233){
-                getWebContents().send("mpvPos",json.data);
-            }
-        }
-    });
-
     var { ipcMain } = require('electron')
-    ipcMain.handle('mpvPosEvent',  async (event, arg) => {
-        if(arg){
-            triggerMpv = true;
-            setTimeout(()=>{
-                try{
-                    mpvSocket.on('error', (err) => {});
-                    mpvSocket.connect({path:require("is-windows")() ? "\\\\.\\pipe\\tmp\\mpv-socket" : "/tmp/mpv-socket"});
-                }catch(e){}
-            },2500)
-            mpvIntervalId = setInterval(()=>{
-                try{
-                    if (!mpvSocket.destroyed){
-                        mpvSocket.write('{ "command": ["get_property", "playback-time"],"request_id": 2233 }'+ '\n')
-                    }
-                }catch(e){}
-            }, 5000);
-        }else{
-            triggerMpv = false;
-            if(mpvIntervalId !== null){
-                clearInterval(mpvIntervalId);
-            }
-            mpvSocket.destroy();
-        }
-        return true;
-    })
     // Quit when all windows are closed.
     app.on('window-all-closed', function () {
         // On OS X it is common for applications and their menu bar
@@ -268,15 +224,6 @@
                 case 'openurl':
                     electron.shell.openExternal(url.substring(url.indexOf('url=') + 4));
                     break;
-                case 'shellstart':
-
-                    var options = require('querystring').parse(parts[1]);
-                    startProcess(options, callback);
-                    return;
-                case 'shellclose':
-
-                    closeProcess(require('querystring').parse(parts[1]).id, callback);
-                    return;
                 case 'video-on':
                     sleepLock = powerSaveBlocker.start('prevent-display-sleep')
                     //mainWindow.resizable = false;
@@ -374,42 +321,6 @@
           }
         });
       }
-
-    var processes = {};
-
-    function startProcess(options, callback) {
-
-        var pid;
-        var args = (options.arguments || '').split('|||');
-
-        try {
-            var process = require('child_process').execFile(options.path, args, {}, function (error, stdout, stderr) {
-
-                if (error) {
-                    console.log('Process closed with error: ' + error);
-                }
-                processes[pid] = null;
-                var script = 'onChildProcessClosed("' + pid + '", ' + (error ? 'true' : 'false') + ');';
-
-                sendJavascript(script);
-            });
-
-            pid = process.pid.toString();
-            processes[pid] = process;
-            callback(pid);
-        } catch (err) {
-            alert('Error launching process: ' + err);
-        }
-    }
-
-    function closeProcess(id, callback) {
-
-        var process = processes[id];
-        if (process) {
-            process.kill();
-        }
-        callback("");
-    }
 
     function registerFileSystem() {
 

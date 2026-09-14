@@ -1,5 +1,32 @@
 # 开发日志
 
+## 2026-09-14 — External Player process-control cleanup Batch 2
+
+基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 创建 `cleanup/external-player-process-chain`，完成 Foundation Cleanup / Legacy Cleanup Batch 2。按任务书重新审计了 `rg`、IPC registration、`electronapphost` protocol dispatch、动态 command string、preload exposure、shell consumer、main caller、tests 和 build/package 输入。Batch 1 已将旧 External Player frontend/plugin 从 fresh runtime 排除，因此 `mpvPosEvent`/`mpvPos`/`mpv-socket`、Electron custom shell process methods、shell protocol process cases 和 main process helper chain 均确认没有其它当前 consumer。
+
+产品变更：
+
+- `src/electronapp/main.js` 删除旧 `net.Socket`、playback-time polling、`ipcMain.handle('mpvPosEvent')`、`webContents.send('mpvPos')`、`shellstart/shellclose` dispatch、`processes` map、`startProcess`、`closeProcess` 和旧 `execFile` callback chain。
+- `src/electronapp/shell.js` 删除 `canExec`、`exec`、`close`、`getProcessClosePromise`、`onChildProcessClosed` 及其 event/argument helpers；保留 `shell.openUrl` 和原有 `electronapphost://openurl` request contract。
+- Anime4K `child_process.exec('notepad.exe ...')`、CEC process execution、refresh-rate process、generic preload `window.ipc`、CD2/diagnostics IPC、CEC、Pepper/libmpv、PlaybackManager、resolver、Session/remote control 均保留。未修改 settings/playback、item autoplay、PlaybackManager external-player guards、shared locale/CSS、`external/`、vendor helper、用户配置或服务器数据。
+
+新增 `tests/external-player-process-chain.test.cjs`，以 source-level contract 检查 dead registration/dispatch/helper 消失，以 VM 行为测试验证 `shell.openUrl` 发出 `GET electronapphost://openurl?url=...`，并以 fake trusted IPC 验证 CD2 resolve/cancel 与 Anime4K/CEC preservation。没有引入新测试框架。
+
+验证结果：
+
+- `npm test`：67/67 PASS；targeted process-chain tests：5/5 PASS。
+- JavaScript syntax：455 files PASS；PowerShell syntax：11 files PASS；`git diff --check`：PASS。
+- fresh runtime `EmbyTheaterEnhanced-0.1.1-batch2-process-chain-65d97da`：runtime provenance PASS（779 product-scope entries），`package.ps1 -VerifyOnly` PASS（2,116 payload files）。runtime `electronapp` 中本批 dead process references 为 0；`shell.js`、preload、CD2/diagnostics、CEC、libmpv、resolver、PlaybackManager、`sessionplayer.js` 均存在。
+- 相对 Batch 1 after-cleanup runtime：实际文件数 2,117 → 2,117，减少 0；大小 389,008,884 → 389,005,881 bytes，减少 3,003 bytes。删除发生在保留的 `main.js`/`shell.js` 文件内部，未删除整个 shared 文件。
+- 唯一一次 bounded real acceptance 使用 `inspect,select,play,pause,seek,resume,next,stop`，全部 PASS；`strm=true`，Pepper-ready、resolver-result、manager-play-resolved、Session/reporting、cleanup 均通过；runner `completed`、`timedOut=false`、`cleanup=verified-clean`、residual owned processes=0。`loadfileObservation=unavailable` 仍是既有 observability gap，不作为 gate。
+
+同步更新 `docs/LEGACY_AUDIT.md`、`docs/EXTERNAL_PLAYER_REMOVAL.md`、`docs/PROJECT_STATUS.md` 和 `docs/TESTING.md`，明确 Batch 1 frontend/plugin layer 与 Batch 2 host/process-control chain 已移除，settings/autoplay/PlaybackManager/shared residue 仍保留。vendor 原件未修改；本轮不 push、不 merge、不开始下一批。
+
+Model Tier: 2
+Model: current Codex session
+Reason: main-process IPC、custom shell、electronapphost protocol、真实 PlaybackManager/Session/remote-control acceptance 均在边界内，需要跨层删除后复核
+Escalated: no
+
 ## 2026-09-14 — External Player registration portability fix
 
 Batch 1 review 的最后 blocker 是 Electron External Player registration 只存在于 ignored Web snapshot 的本机修改。本轮新增 `tools/patch-external-player-registration.cjs`，以精确 registration pattern 做可重复、幂等且 fail-closed 的 patch；`tools/build.ps1` 在 source overlay 后执行它，再移除 `electronapp/www/modules/externalplayer`。Android `native/android/externalplayer` 和其它平台分支保持不变。

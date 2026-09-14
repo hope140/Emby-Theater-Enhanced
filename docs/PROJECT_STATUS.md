@@ -1,5 +1,17 @@
 # 项目状态
 
+## 2026-09-14 — External Player process-control cleanup Batch 2
+
+基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 在 `cleanup/external-player-process-chain` 完成本批 host/process legacy cleanup。重新审计确认 Batch 1 已从 fresh runtime 排除 External Player frontend/plugin，`mpvPosEvent`、`mpvPos`、`mpv-socket`、Electron custom shell 的 `canExec/exec/close`、close-event helpers、`shellstart/shellclose`、`processes`、`startProcess`、`closeProcess` 和旧 `execFile` callback chain 均无其它当前 consumer，已从维护产品代码删除。
+
+保留项：`shell.openUrl` 与 `electronapphost://openurl`、generic `window.ipc`、CD2/diagnostics IPC、其它 host protocol command、CEC、Anime4K `child_process.exec('notepad.exe ...')` helper、Pepper/libmpv、PlaybackManager、resolver、Session/remote control 和 `sessionplayer.js`。浏览器 fallback `www/modules/shell.js` 的 unsupported process API 未改动，vendor/carnival 原件未改动。
+
+新 runtime `dist/EmbyTheaterEnhanced-0.1.1-batch2-process-chain-65d97da` provenance PASS（779 product-scope entries），package verify PASS（2,116 payload files）。runtime `electronapp` 下本批 dead reference 为 0；相对 Batch 1 after-cleanup runtime，实际文件数保持 2,117，大小由 389,008,884 降至 389,005,881 bytes，减少 3,003 bytes。文件数不变是因为删除发生在保留的 `main.js`/`shell.js` 文件内部。
+
+新增 targeted process-chain tests 5/5；全量 `npm test` 67/67。唯一一次 bounded real acceptance 的 `inspect/select/play/pause/seek/resume/next/stop` 全部通过，`strm=true`，Pepper-ready、resolver-result、manager-play-resolved、Session/reporting、cleanup 均通过，runner `completed`、`timedOut=false`、residual owned processes=0。`loadfileObservation=unavailable` 仍是既有 observability gap，不作为 gate。
+
+本批未处理 settings/playback、item autoplay、PlaybackManager external-player guards、shared locale/CSS、`external/`、vendor helper、CEC、Pepper/PPAPI、Electron upgrade 或用户配置迁移；当前不能写成 External Player 全部移除。Model Tier：2；Reason：跨 main-process IPC、custom shell、host protocol 和真实播放/Session 边界的删除与验收。
+
 ## 2026-09-14 — External Player registration portability fix
 
 在 `cleanup/external-player-frontend` 上补齐 Batch 1 最后一个 portability blocker。新增 tracked `tools/patch-external-player-registration.cjs`，只处理 Electron 的 `responses.electron && list.push("modules/externalplayer/plugin")`；`tools/build.ps1` 在 source overlay 后执行 patch，再排除 External Player frontend directory。Android/其它平台分支不受影响，already-clean 状态幂等，重复/未知变体 fail closed。
@@ -42,7 +54,7 @@ Local audit workspace：41 个 ignored snapshot files 曾在本机删除。Durab
 
 - Baseline：用户提供的 Carnival 3.0（应用 3.0.20-3.0）+ 综合补丁最终 ZIP。
 - Enhanced：0.1.1 开发候选；Windows host 文件版本保持 3.0.20.0，Electron 应用构建版本为 0.1.1。
-- Git：本地 Git baseline 完成；当前工作分支为 `main`，HEAD 与 `origin/main` 均为 `e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`。Readiness harness 已随 PR #5 合并；本轮诊断的 harness 与文档改动尚未提交、推送或创建 PR。未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
+- Git：本轮基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 创建 `cleanup/external-player-process-chain`；Batch 2 变更只保留在该本地分支，未 push、未 merge、未创建 PR。未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
 - 源码：`src/electronapp`；原件在根目录，解包输入在 `vendor/carnival` 与 `vendor/patch`。
 - 交付：`dist/EmbyTheaterEnhanced-0.1.1-final-win-x64/Start-Enhanced.cmd`；`dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe`。旧 0.1.0 产物保留。
 - 工具：`tools/prepare.ps1`、`build.ps1`、`package.ps1`、`test-runtime.ps1`、`test-host.ps1`、`tests/readiness-acceptance.ps1`。
@@ -65,7 +77,7 @@ Local audit workspace：41 个 ignored snapshot files 曾在本机删除。Durab
 | CloudDrive2 Resolver PR #2 | merge blocker 已修正；43/43、fake/frozen、Stop-before-player、reject fallback、POSIX mapping、真实 CD2 media core-playing 通过；两个真实 Emby POSIX STRM 样本均 `cd2_hit`，完整控制链与报告通过 |
 | CloudDrive2 DirectUrl PR #4 | 56/56；file-local UA/no-leak、unsafe header/UA fallback、expiry reacquire、Abort/timeout/shared budget、fake frozen 完整链既有证据通过；重建 runtime 的 DirectUrl 请求与 UA isolation 通过，真实 DirectUrl + returned UA 的既有 embedded libmpv 分层证据有效；完整实服 PlaybackManager 仍受 resolver 前 timeout 阻塞 |
 | Acceptance readiness harness | full runtime provenance 覆盖 818 个 `src/electronapp` 文件与 2 个 Start wrapper，package/PlaybackManager overlay 单独校验；terminal success/failure/timeout、terminal race、PID mismatch synthetic 均通过；历史较新 real artifact 已贯通至 resolver-result，runnerResult=completed/timedOut=false/residual=0，loadfile 保持 unavailable observability gap |
-| External Player | 已禁用入口并测试；保留旧实现 |
+| External Player | frontend/plugin 与 host/process-control chain 已移除；settings/autoplay/PlaybackManager/shared residue 仍保留 |
 | 环境诊断 | 实际 Electron/Chrome/Node、DLL API/version、ready/playing 已取得 |
 | mpv.conf / GPU / HDR | 配置规则/隔离通过；真实样本 gpu-next、d3d11va 硬解及缓存 3221225472 字节已取得；HDR/画质效果不是本次样本覆盖范围 |
 
