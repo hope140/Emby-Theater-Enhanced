@@ -33,6 +33,42 @@
         return {type: 'miss', reason: reason || 'cd2_unavailable', fallback: true};
     }
 
+    function isHttpUrl(value) {
+        var parsed;
+
+        if (typeof value !== 'string' || !/^https?:\/\//i.test(value)) return false;
+        try {
+            parsed = new URL(value);
+        } catch (error) {
+            return false;
+        }
+        return /^https?:$/.test(parsed.protocol) && !!parsed.hostname && !parsed.username &&
+            !parsed.password && !parsed.hash;
+    }
+
+    function makeHit(response) {
+        var direct = response.sourceKind === 'direct-url';
+        var value = {
+            type: 'url',
+            source: response.source,
+            reason: response.reason || (direct ? 'direct_url_hit' : 'cd2_hit'),
+            sourceKind: direct ? 'direct-url' : (response.sourceKind || 'cd2-url'),
+            fallback: false
+        };
+
+        if (direct && response.requestOptions && typeof response.requestOptions === 'object') {
+            value.requestOptions = {};
+            if (typeof response.requestOptions.userAgent === 'string') {
+                value.requestOptions.userAgent = response.requestOptions.userAgent;
+            }
+            if (!Object.keys(value.requestOptions).length) delete value.requestOptions;
+        }
+        if (response.acquiredAt !== undefined) value.acquiredAt = response.acquiredAt;
+        if (response.expiresAt !== undefined) value.expiresAt = response.expiresAt;
+        if (typeof response.directReason === 'string') value.directReason = response.directReason;
+        return value;
+    }
+
     async function resolve(context, dependencies) {
         var transport = getTransport(dependencies);
         var requestId = dependencies && dependencies.requestId;
@@ -55,8 +91,8 @@
             if (signal && signal.aborted) throw abortError();
             if (response && response.status === 'cancelled') throw abortError();
             if (response && response.status === 'hit' && response.type === 'url' &&
-                typeof response.source === 'string' && /^https?:\/\//i.test(response.source)) {
-                return {type: 'url', source: response.source, reason: 'cd2_hit', fallback: false};
+                isHttpUrl(response.source)) {
+                return makeHit(response);
             }
             return miss(response && response.reason);
         } catch (error) {

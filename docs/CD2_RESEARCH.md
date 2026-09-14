@@ -740,3 +740,11 @@ Targeted tests reached 38/38. A dedicated frozen runtime test held PlaybackInfo 
 The real-media failure was sample/diagnostic-specific, not a general CD2 HTTP incompatibility. A bounded second selection produced a normal medium-size MKV. The final frozen runtime observed the CD2 path accepted, MKV format, 13 tracks including one video and one audio, `core-playing`, `core-idle=false`, cache state/time and advancing time-pos; no EOF/error was observed. The Pepper bridge does not expose native start-file/file-loaded/end-file/log-message events, so start/end remain not directly observable and file-loaded is inferred from format plus track list.
 
 Real Emby full-chain acceptance was attempted only after that success. Both bounded attempts stopped at inspect with `not-logged-in`; no media was played and CD2, Session, WebSocket, controls and reports were not exercised. Those server-backed checks remain pending because the saved login state was unavailable.
+
+## 18. PR #4 DirectUrl result
+
+PR #4 freezes the capability order as safe DirectUrl → same-origin `downloadUrlPath` → Mount → Native. mpv 0.41 documents the fourth `loadfile` argument as per-file options restored at end of playback; the exact frozen Pepper bridge was then tested with `loadfile <url> replace -1 user-agent=<value>`. UA-A、UA-B 与无 option 的 same-origin C 均识别格式并推进，HTTP 端只观察到当前 source 的 UA，没有跨 source 残留。全局 `user-agent` set/reset 因跨 generation 竞态继续禁止。
+
+`DDSRem-Dev/MoviePilot-Plugins` 与 `baranwang/MoviePilot-Plugins` 均证明 acquisition 可在一次 `get_direct_url=true` 响应中优先 `directUrl`，并在缺失时使用 `downloadUrlPath`；`DDSRem-Dev/clouddrive2-client` 的 wrapper/proto 确认相同请求字段以及 `expiresIn` 的秒数语义。这些普通 HTTP client 实现不构成 libmpv header 安全证据。本项目只开放严格校验后的 file-local User-Agent；任意 non-empty `additionalHeaders` 均为 `unsupported_headers` 并回退 same-origin。
+
+实现不跨 generation 缓存 URL，DirectUrl、一次 near-expiry reacquire 与 same-origin 共用 750ms absolute budget。已知近过期 URL 最多重取一次；当前 bridge 无可靠 HTTP 403/end-file error 分类，不实现运行中错误触发 refresh。55/55 unit/fake 通过；frozen fake DirectUrl 完整 PlaybackManager/controls/reports 与 UA 隔离通过。真实 persistent-profile 样本返回 DirectUrl、required UA 与 expiry，embedded libmpv 成功接受 path、识别 format、进入 core-playing 并推进时间。完整 PlaybackManager 实服复测多次在 resolver 前 `playback-not-started`，故 Session/WebSocket/controls/reports 仍未取得 PR #4 新证据。

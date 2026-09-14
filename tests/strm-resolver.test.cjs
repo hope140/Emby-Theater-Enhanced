@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const strmResolver = require('../src/electronapp/resolvers/strm-resolver');
+const cd2Resolver = require('../src/electronapp/resolvers/cd2-resolver');
 
 function createFixture(name, sourcePath) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ete-strm-resolver-'));
@@ -29,6 +30,33 @@ function resolveFor(fixture, overrides, dependencies) {
         playMethod: 'DirectPlay'
     }, overrides || {}), dependencies || {fs});
 }
+
+test('CD2 renderer adapter preserves only the direct URL request option', async () => {
+    const result = await cd2Resolver.resolve({}, {
+        requestId: 'adapter-direct',
+        candidates: ['X:\\Media\\file.mkv'],
+        cd2Transport: {
+            resolve: async () => ({
+                status: 'hit',
+                type: 'url',
+                source: 'https://cdn.example.test/file?fixture=opaque',
+                sourceKind: 'direct-url',
+                requestOptions: {
+                    userAgent: 'CD2-Client/1.0',
+                    ignored: 'not-forwarded'
+                },
+                acquiredAt: 1000,
+                expiresAt: 61000
+            })
+        }
+    });
+
+    assert.equal(result.sourceKind, 'direct-url');
+    assert.deepEqual(result.requestOptions, {userAgent: 'CD2-Client/1.0'});
+    assert.equal(result.ignored, undefined);
+    assert.equal(result.acquiredAt, 1000);
+    assert.equal(result.expiresAt, 61000);
+});
 
 test('STRM detection uses Item.Path suffix or MediaSource.Container', () => {
     assert.equal(strmResolver.isStrm({
@@ -345,7 +373,7 @@ test('async STRM resolution prefers CD2 URL over an existing Mount candidate', a
             cd2Transport: {
                 resolve: async request => {
                     assert.equal(request.candidates[0], local);
-                    return {status: 'hit', type: 'url', source: 'http://127.0.0.1:19798/source'};
+                    return {status: 'hit', type: 'url', source: 'http://127.0.0.1:19798/source', sourceKind: 'cd2-url'};
                 }
             }
         });
@@ -353,6 +381,46 @@ test('async STRM resolution prefers CD2 URL over an existing Mount candidate', a
         assert.equal(result.type, 'url');
         assert.equal(result.reason, 'cd2_hit');
         assert.equal(result.isStrm, true);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('async STRM resolution preserves DirectUrl source kind and file-local User-Agent', async () => {
+    const fixture = createFixture('Movie.mkv.strm');
+    const local = path.join(fixture.directory, 'Movie.mkv');
+    fs.writeFileSync(local, 'fixture');
+
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {
+            fs,
+            requestId: 'direct-source',
+            cd2Transport: {
+                resolve: async request => {
+                    assert.equal(request.candidates[0], local);
+                    return {
+                        status: 'hit',
+                        type: 'url',
+                        source: 'https://cdn.example.test/file?fixture=opaque',
+                        sourceKind: 'direct-url',
+                        requestOptions: {userAgent: 'CD2-Client/1.0'},
+                        acquiredAt: 1000,
+                        expiresAt: 61000
+                    };
+                }
+            }
+        });
+
+        assert.equal(result.type, 'url');
+        assert.equal(result.sourceKind, 'direct-url');
+        assert.deepEqual(result.requestOptions, {userAgent: 'CD2-Client/1.0'});
+        assert.equal(result.acquiredAt, 1000);
+        assert.equal(result.expiresAt, 61000);
     } finally {
         fixture.cleanup();
     }

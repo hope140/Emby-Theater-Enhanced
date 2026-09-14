@@ -1,5 +1,13 @@
 # 变更记录
 
+## 0.1.1 CloudDrive2 DirectUrl 候选 — 2026-09-14
+
+- 新增 capability-based DirectUrl acquisition；不安全或不可用时严格回到 CD2 same-origin HTTP → Mount → Native。
+- 当前 frozen Pepper/libmpv 仅开放已实测的 `loadfile <url> replace -1 user-agent=<value>`；禁止全局 User-Agent set/reset，任意 additionalHeaders 均判为 unsupported。
+- 新增 User-Agent、URL、expiry 校验、一次 bounded near-expiry reacquire、共享 750ms absolute budget 与 `ETE_CD2_DIRECT_URL=0` 回退开关。
+- unit/fake 56/56；frozen UA-A → UA-B → same-origin 无泄漏；fake DirectUrl 完整 PlaybackManager/controls/reports 通过；真实 CD2 DirectUrl + returned UA 在 embedded libmpv 中播放推进。
+- 本轮完整真实 PlaybackManager 验收连续停在 resolver 前的 `playback-not-started`；不把已有 PR #2 Session/WebSocket 结果冒充为 PR #4 全链通过。
+
 ## 0.1.1 CloudDrive2 Resolver 候选 — 2026-09-13
 
 - 新增 main-process CloudDrive2 gRPC transport、窄化 renderer IPC、单条安全 path mapping 与 same-origin download URL 校验。

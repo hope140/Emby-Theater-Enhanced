@@ -1,5 +1,33 @@
 # 开发日志
 
+## 2026-09-14 — PR #4 DirectUrl 收尾验证
+
+按已冻结的 PR #4 contract 完成机械回归与分层收尾，没有重做 Sol High review、没有重构 DirectUrl，也没有修改 PlaybackManager ownership、Session/WebSocket、libmpv 生命周期或服务器/CD2 配置。先发现既有 `cd2-direct-url-c` runtime 的 `cd2-service.js` 未包含 same-origin reserve 与显式空 UA fail-closed 修复，未覆盖原目录，改由 `tools/build.ps1` 生成独立 verification runtime（2156 files）；四个关键生产文件与 `src/` 逐 SHA256 一致。
+
+验证结果：`npm test` 56/56；4 条 blocker targeted tests 通过，覆盖 fallback budget、near-expiry reacquire 保留 same-origin 时间窗、reacquire failure fallback 和显式空 UA/非空 header fail-closed；13 个修改/新增 JS、3 个 PowerShell 脚本语法通过，`git diff --check` 通过。新 frozen runtime 的 gRPC/direct response smoke 通过（Electron 18.3.15、Node 16.13.2、grpc-js 1.14.4、proto-loader 0.8.1、0 native addon）；exact Pepper UA-A → UA-B → same-origin C 全部 path/format/core-idle=false/time-pos advancing 且无泄漏；Stop-before-player 通过。
+
+新 runtime 的完整 DirectUrl pipeline 进入 resolver 并观察到 DirectUrl 请求、UA 精确匹配与 no-leak，但在切换第二个 fixture source 时发生 UI smoke timeout，整体 fixture 不记为全链通过。一次有界真实 DirectSmoke 的 inspect/select 通过，但 resolver 阶段 timeout，未进入 bridge；既有成功的真实 DirectUrl + returned UA/expiry + embedded libmpv 播放推进证据保留。上述 readiness/前置 timeout 未证明 DirectUrl 或 same-origin fallback 失败，也未取得新的完整实服 Session/WebSocket/controls/reports 证据。敏感信息扫描仅发现合成 example/localhost fixture，未发现真实凭据、URL/query token、Cookie、路径或 UA。
+
+Model Tier: 1
+Model: current Codex session / Luna Max
+Reason: contract、验收边界与修改范围已冻结，本轮为测试、frozen runtime、敏感信息审计和文档收尾
+Escalated: no
+
+结论：原三个 Sol code blocker 均有当前源码 targeted evidence；acceptance infrastructure blocker 仍存在。PR #4 product code `READY FOR TARGETED FINAL REVIEW`，不 merge、不提交、不发布。
+
+## 2026-09-14 — PR #4 DirectUrl 安全实现与分层验收
+
+从 `main@ba3d7e9` 创建 `feat/cd2-direct-url`。Sol High contract review 先冻结 file-local header、expiry、generation 与 fallback 边界；Luna Max worker 按明确 contract 实现，主线程复核 diff 与验收。DirectUrl 只改变最终 source，PlaybackManager、MediaSource/Item/PlaySessionId、Session/WebSocket、libmpv ownership 与报告链均未改。
+
+exact frozen Pepper 使用字符串 argv 调用 `mpv_command`。隔离 fake HTTP 验证 `loadfile <url> replace -1 user-agent=<value>` 的 UA-A → UA-B → same-origin C 三段均推进且无泄漏。产品实现只允许受限可打印 ASCII UA；任意 additionalHeaders、unsafe UA、malformed URL、invalid/near expiry 与 transport failure 优先 same-origin。DirectUrl 与 fallback 共用 750ms absolute budget，known-expiry 最多重取一次，Abort/Stop/NextTrack 继续取消旧 request 并丢弃 late response；未实现全局 header、provider 特判、后台刷新或 HTTP-error retry。
+
+验证：55/55 unit/fake、修改 JS/PS 语法与 `git diff --check` 通过；frozen fake DirectUrl 一次完整运行覆盖 UA isolation、Pause/Seek/Resume/NextTrack/Stop、generation/cancel 与 19 条报告。真实 persistent profile 的分层 smoke 选取既有 STRM，取得 `sourceKind=direct-url`、returned UA/expiry present、path/format/core-playing/time advancing。完整 PlaybackManager 实服复测连续在 resolver 前 45 秒超时，same-origin 强制 smoke 两次停在 embed `bridge-not-ready`；这些失败没有发送旧 DirectUrl 或证明 fallback 错误，但使 PR #4 保持 NOT READY。未改服务器、CD2 config/mount/cache、账号或网盘数据。
+
+Model Tier: 2
+Model: GPT-5.6 Sol High contract/review + GPT-5.6 Luna Max implementation
+Reason: file-local header isolation、expiry、generation 与 fallback correctness 跨播放器/main/renderer
+Escalated: yes；按项目模型分级执行
+
 ## 2026-09-14 — single-prefix mapping 与真实 Emby CD2 验收完成
 
 继续 `feat/cd2-resolver`，没有改产品 resolver、PlaybackManager、Session/WebSocket 或 libmpv。使用同一个 persistent acceptance profile，先对两个有限 STRM 样本做脱敏只读诊断：两个 `Item.Path`/`MediaSource.Path` 关系可由同一条 source-side POSIX prefix → cloud prefix 表示，relative suffix 保持；`mapLocalPath` 的边界、`..` 拒绝和 POSIX case sensitivity 通过。两个候选 CD2 target 均为 regular file，`FindFileByPath` 与 `GetDownloadUrlPath(get_direct_url=false)` 成功，HEAD 200、Range 206、无重定向。实际 mapping 只写入 ignored local acceptance 配置，未进入源码、文档、fixture、acceptance report 或 Git。

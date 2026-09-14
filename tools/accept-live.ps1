@@ -2,6 +2,7 @@ param(
     [switch]$AuthorizedLivePlayback,
     [switch]$InspectOnly,
     [switch]$SelectOnly,
+    [switch]$DirectSmokeOnly,
     [switch]$VisualOnly,
     [switch]$InspectProfile,
     [switch]$LaunchManualLogin,
@@ -18,7 +19,7 @@ function Assert-OutsideRepository([string]$candidate) {
     }
     return $candidateFull
 }
-if(@($InspectProfile,$LaunchManualLogin,$InspectOnly,$SelectOnly,$VisualOnly|Where-Object{$_}).Count -gt 1){throw 'Acceptance modes are mutually exclusive.'}
+if(@($InspectProfile,$LaunchManualLogin,$InspectOnly,$SelectOnly,$DirectSmokeOnly,$VisualOnly|Where-Object{$_}).Count -gt 1){throw 'Acceptance modes are mutually exclusive.'}
 if(-not $InspectProfile -and -not $LaunchManualLogin -and -not $AuthorizedLivePlayback){throw 'User authorization for sample selection/playback/remote control is required.'}
 if($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$'){throw 'Invalid runtime name.'}
 $runtime=Join-Path (Join-Path $root 'dist') $RuntimeName
@@ -44,6 +45,7 @@ $info.EnvironmentVariables['ETE_ACCEPT_RUNTIME']=$runtime
 $info.EnvironmentVariables['ETE_ACCEPT_OUTPUT']=$output
 if($InspectOnly){$info.EnvironmentVariables['ETE_ACCEPT_INSPECT_ONLY']='1'}
 if($SelectOnly){$info.EnvironmentVariables['ETE_ACCEPT_SELECT_ONLY']='1'}
+if($DirectSmokeOnly){$info.EnvironmentVariables['ETE_ACCEPT_DIRECT_SMOKE']='1'}
 if($VisualOnly){$info.EnvironmentVariables['ETE_ACCEPT_VISUAL']='1'}
 if($InspectProfile){$info.EnvironmentVariables['ETE_ACCEPT_PROFILE_INSPECT']='1'}
 if($LaunchManualLogin){$info.EnvironmentVariables['ETE_ACCEPT_MANUAL_LOGIN']='1'}
@@ -81,3 +83,4 @@ if($InspectProfile){
 $summary=[ordered]@{completed=$result.completed;error=$result.error;stage=$result.currentStage;steps=@($result.stages|ForEach-Object{[ordered]@{method=$_.method;ok=$_.result.ok}})}
 if($null -ne $result.resolver){$summary.resolver=@($result.resolver)}
 $summary|ConvertTo-Json -Depth 6
+if($process.ExitCode -ne 0 -or -not $result.completed -or $result.error){throw 'Live acceptance did not complete successfully.'}
