@@ -23,7 +23,7 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
 
         if (!result || result.sourceKind !== 'direct-url' || !result.requestOptions) return [];
         userAgent = result.requestOptions.userAgent;
-        if (typeof userAgent !== 'string' || userAgent.length < 1 || userAgent.length > 1024 ||
+        if (typeof userAgent !== 'string' || !userAgent.trim() || userAgent.length > 1024 ||
             !/^[\x20-\x7e]+$/.test(userAgent) || /[,\\]/.test(userAgent)) {
             return [];
         }

@@ -228,6 +228,7 @@ test('unsafe User-Agent and any non-empty additionalHeaders use same-origin fall
     for (const directFields of [
         {directUrl: 'https://cdn.example.test/file', userAgent: 'bad,ua', downloadUrlPath: '/fallback/ua'},
         {directUrl: 'https://cdn.example.test/file', userAgent: '', downloadUrlPath: '/fallback/empty-ua'},
+        {directUrl: 'https://cdn.example.test/file', userAgent: '   ', downloadUrlPath: '/fallback/whitespace-ua'},
         {directUrl: 'https://cdn.example.test/file', userAgent: 'bad\\ua', downloadUrlPath: '/fallback/backslash'},
         {directUrl: 'https://cdn.example.test/file', userAgent: 'bad\r\nua', downloadUrlPath: '/fallback/crlf'},
         {directUrl: 'https://cdn.example.test/file', userAgent: '非 ASCII', downloadUrlPath: '/fallback/non-ascii'},

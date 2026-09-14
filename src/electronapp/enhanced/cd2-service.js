@@ -250,7 +250,7 @@ function validateUserAgent(value) {
     if (value === undefined || value === null) {
         return {present: false};
     }
-    if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') < 1 ||
+    if (typeof value !== 'string' || !value.trim() ||
         Buffer.byteLength(value, 'utf8') > 1024 || !/^[\x20-\x7e]+$/.test(value) ||
         /[,\\]/.test(value)) {
         return {present: true, valid: false};
