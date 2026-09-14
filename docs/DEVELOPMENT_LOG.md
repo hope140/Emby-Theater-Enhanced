@@ -1,5 +1,20 @@
 # 开发日志
 
+## 2026-09-14 — Foundation legacy audit
+
+本轮按任务书在 `main@c873913ea1a2716e048e785fa2fd83294dd091b5` 上执行 Foundation Cleanup / Legacy Audit。范围限定为审计、分类和可执行清单，不删除产品代码、不修改播放架构、不运行 Carnival 或综合补丁安装/恢复脚本、不执行真实 Emby acceptance、不提交或推送。
+
+静态追踪确认：维护版 `www/app.js` 已以 `responses.electron && false` 禁止 External Player 默认注册，disabled plugin 构造函数返回空路由/不可播放；其 41 个 module/controller/HTML/locale 文件仍随全量 vendor copy 进入 runtime。旧 `mpvPosEvent`/`mpv-socket` producer 只有该不可达 plugin consumer；`shell.js` 的 `openUrl` 仍有四类活动调用者，只有 process-only `exec/canExec/close` 可作为拆分候选。CEC 由顶层 plugin 动态加载并通过 `electroncec` 初始化，判为 KEEP。动态 plugin、opaque managed host、CEC executable 参数、用户 settings/autoplay、Anime4K preset、CEC driver/alias 和平台分支按证据不足或共享风险列为 UNKNOWN/DEFER。
+
+新增 `docs/LEGACY_AUDIT.md`，记录 8 个任务领域、依赖链、KEEP/DELETE CANDIDATE/DEFER/UNKNOWN、三个 cleanup batch、payload 统计和 Batch 1 回归条件。统计包括 External Player 41 文件约 77KB、CEC 15 文件约 1.47MB、`external/` 46 文件约 29.34MB、旧 root BAT 约 13.9KB；vendor 原件和 ignored runtime 均保持只读。
+
+验证：`npm test` 57/57；本轮未运行安装器、真实播放或远控验收。产品代码 modified：NO。
+
+Model Tier: 1
+Model: current Codex session
+Reason: task contract was audit-only; implementation scope was limited to documentation and static cross-module evidence
+Escalated: no
+
 ## 2026-09-14 — Pepper ready listener race follow-up
 
 本轮在 `fix/pepper-ready-listener-race` 上执行，基于 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`。上一轮诊断 harness/doc 资产已先独立保留为 `ef34827378805e7a80ea0f73e1f5bbf2ddbf9314`；本轮不混入临时 instrumentation。

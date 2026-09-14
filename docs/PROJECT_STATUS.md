@@ -1,5 +1,13 @@
 # 项目状态
 
+## 2026-09-14 — Legacy cleanup audit
+
+基于当前 `main@c873913ea1a2716e048e785fa2fd83294dd091b5` 完成 Foundation Cleanup / Legacy Audit。本轮只做静态引用追踪、分类和 packaging inventory，没有修改 `src/` 产品行为、PlaybackManager、Session、libmpv、resolver、CD2、CEC 或用户数据，没有删除代码、运行 Carnival/补丁脚本、执行真实 Emby 播放、提交或推送。
+
+新增 `docs/LEGACY_AUDIT.md`，覆盖 External Player、shell/exec、CEC、旧 IPC/named pipe、settings/routes、打包残留和平台兼容代码。结论为：External Player 41 文件及其旧 mpv pipe 具备高置信度删除候选条件；shared `shell.openUrl`、CEC、preload generic IPC 和 Foundation 播放/Session 链必须保留；Pepper/PPAPI/Electron 18、平台分支、CEC driver/alias、Anime4K preset 和 settings/autoplay 语义继续 DEFER/UNKNOWN。当前推荐进入 Cleanup Batch 1 规划，尚未执行 cleanup PR。
+
+本轮静态证据包含 vendor manifest/build/installer 全量复制关系、当前 ignored Web snapshot 和实际 runtime payload 统计。验证：`npm test` 57/57；未执行真实 acceptance 或安装验收。产品代码 modified：NO。
+
 ## 2026-09-14 — Pepper ready listener race follow-up
 
 分支 `fix/pepper-ready-listener-race` 基于 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`，上一轮诊断 harness/doc 资产已由 `ef34827378805e7a80ea0f73e1f5bbf2ddbf9314` 独立保留。本轮产品修复 commit 为 `731dc2ad5ca4898475a5e641b6975563f9cf8c74`，仅将 authoritative window `ready` listener 和 `libmpv=embed` 初始化移到 DOM attach 前，并新增行为型同步 ready 回归。新 runtime provenance 通过；一次真实 acceptance 的 inspect/select/isStrm/Pepper-ready/resolver-result/manager-resolved/cleanup 全部通过。历史 readiness 根因仍未确认，本修复只处理静态 listener-after-attach 风险；未 push、未 merge。
