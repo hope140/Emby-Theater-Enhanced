@@ -24,6 +24,10 @@ foreach ($group in @(@{ Root='vendor/carnival'; Files=$manifest.files }, @{ Root
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'vendor/carnival') | Copy-Item -Destination $destination -Recurse
 Get-ChildItem -LiteralPath (Join-Path $root 'src/electronapp') | Copy-Item -Destination (Join-Path $destination 'electronapp') -Recurse -Force
+& node (Join-Path $root 'tools/copy-runtime-dependencies.cjs') (Join-Path $destination 'electronapp')
+if ($LASTEXITCODE -ne 0) { throw 'Runtime dependency copy failed.' }
+& node (Join-Path $root 'tools/patch-playbackmanager.cjs') (Join-Path $destination 'electronapp/www/modules/common/playback/playbackmanager.js')
+if ($LASTEXITCODE -ne 0) { throw 'PlaybackManager overlay failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'vendor/patch/payload/libmpv/mpv-1.dll') -Destination (Join-Path $destination 'electronapp/libmpv/x64/mpv-1.dll') -Force
 # Settings remain at the user's existing values; the optional legacy mpv preset is not applied.
 $version = (Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version

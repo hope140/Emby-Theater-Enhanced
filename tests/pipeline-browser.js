@@ -1,7 +1,7 @@
 // Executed only by the local integration harness in an isolated Electron profile.
 // Real PlaybackManager + ApiClient report serializers + message dispatcher;
 // API responses and delivery are in memory, not a real Emby server/session.
-async function runPipelineFixture(fixture, mountSidecar) {
+async function runPipelineFixture(fixture, mountSidecar, cd2Mode, cd2Origin, stopBeforePlayerOnly) {
     const trace = window.__pipelineTrace = [];
     window.addEventListener('unhandledrejection', event=>trace.push('rejection: '+String(event.reason)));
     const deps = await new Promise((resolve,reject) => require([
@@ -14,7 +14,8 @@ async function runPipelineFixture(fixture, mountSidecar) {
     deps[6].showVideoOsd = () => Promise.resolve();
     const embedded = plugins.ofType('mediaplayer').find(p=>p.id==='libmpvmediaplayer');
     const originalPlay = embedded.play;
-    embedded.play = function(options) { trace.push('embedded.play source-match='+String(options.url===fixture)+' method='+options.playMethod); return originalPlay.call(this,options); };
+    let embeddedPlayCount = 0;
+    embedded.play = function(options) { embeddedPlayCount++; trace.push('embedded.play source-match='+String(options.url===fixture)+' method='+options.playMethod); return originalPlay.call(this,options); };
     trace.push('modules loaded');
     const ApiClient = ApiClientModule.default || ApiClientModule;
     const api = new ApiClient(window.localStorage, null, 'http://127.0.0.1:1', 'Enhanced fixture', '0.1.0', 'Fixture', 'fixture-device', 1);
@@ -22,6 +23,8 @@ async function runPipelineFixture(fixture, mountSidecar) {
     const calls = [];
     const items = new Map();
     let activeItem;
+    let pendingPlaybackId;
+    let releasePendingPlayback;
     api.serverInfo = () => ({Id:'fixture-server'});
     api.serverId = () => 'fixture-server';
     api.getCurrentUserId = () => 'fixture-user';
@@ -35,11 +38,15 @@ async function runPipelineFixture(fixture, mountSidecar) {
         trace.push('PlaybackInfo');
         calls.push('PlaybackInfo');
         const selected = items.get(id) || activeItem;
-        return Promise.resolve({PlaySessionId:'play-'+selected.Id,MediaSources:[{
+        const response = {PlaySessionId:'play-'+selected.Id,MediaSources:[{
             Id:'source-'+selected.Id,Path:fixture,Protocol:'Http',IsRemote:false,Container:'y4m',
             MediaStreams:[],RunTimeTicks:50000000,SupportsDirectPlay:true,
             SupportsDirectStream:true,SupportsTranscoding:false,RequiredHttpHeaders:[]
-        }]});
+        }]};
+        if (id === pendingPlaybackId) {
+            return new Promise(resolve => { releasePendingPlayback = () => resolve(response); });
+        }
+        return Promise.resolve(response);
     };
     api.getItem = (user,id) => Promise.resolve(items.get(id) || activeItem);
     api.getItems = () => Promise.resolve({Items:[activeItem],TotalRecordCount:1});
@@ -58,6 +65,29 @@ async function runPipelineFixture(fixture, mountSidecar) {
     events.trigger(connections, 'apiclientcreated', [api]);
     const sleep = ms => new Promise(r=>setTimeout(r,ms));
     const send = (command, extra) => events.trigger(api, 'message', [{MessageType:'Playstate',Data:Object.assign({Command:command},extra)}]);
+    let stopBeforePlayer = null;
+    if (stopBeforePlayerOnly) {
+        const pendingItem = {Id:'fixture-stop-before-player',ServerId:'fixture-server',Name:'Pending stop',
+            MediaType:'Video',Type:'Movie',Path:fixture,RunTimeTicks:50000000,UserData:{},MediaStreams:[]};
+        items.set(pendingItem.Id,pendingItem);
+        activeItem=pendingItem;
+        pendingPlaybackId=pendingItem.Id;
+        const playCallsBeforePending = embeddedPlayCount;
+        const pendingPlay = manager.play({items:[pendingItem],fullscreen:true,startPositionTicks:0});
+        for(let i=0;i<30 && !releasePendingPlayback;i++) await sleep(10);
+        const reachedPendingStage = typeof releasePendingPlayback === 'function';
+        await manager.stop();
+        if (releasePendingPlayback) releasePendingPlayback();
+        const pendingSettled = await Promise.allSettled([pendingPlay]);
+        await sleep(100);
+        stopBeforePlayer = {
+            reachedPendingStage,
+            requestSettled:pendingSettled[0].status==='fulfilled',
+            playerPlayNotCalled:embeddedPlayCount===playCallsBeforePending,
+            noPlayingReport:!records.some(record=>record.body.ItemId===pendingItem.Id && record.endpoint.endsWith('/Playing'))
+        };
+        return {stopBeforePlayer,results:[],next:null,generation:null,records,calls};
+    }
     const results = [];
     for (const kind of ['video','strm']) {
         trace.push('starting '+kind);
@@ -90,25 +120,75 @@ async function runPipelineFixture(fixture, mountSidecar) {
                 mountCandidateExists = false;
             }
         }
+        const expectedSource = kind === 'strm' && cd2Mode === 'hit'
+            ? sourceUsed.indexOf(fixture + '?cd2=') === 0
+            : kind === 'strm' && cd2Mode === 'real'
+            ? typeof sourceUsed === 'string' && new URL(sourceUsed).origin === new URL(cd2Origin).origin
+            : (kind==='strm' && mountSidecar) ? sourceUsed===expectedMount : sourceUsed===fixture;
         results.push({kind,playerId:player.id,paused,sought,resumed,
             itemSidecarPreserved:state.NowPlayingItem.Path===activeItem.Path,
             sourcePreserved:state.MediaSource.Path===fixture,
-            mountSourceUsed:(kind==='strm' && mountSidecar) ? sourceUsed===expectedMount : sourceUsed===fixture,
+            mountSourceUsed:expectedSource,
             mountCandidateExists:mountCandidateExists,
             sessionPreserved:!!start && !!stop && itemRecords.every(r=>r.body.PlaySessionId==='play-'+activeItem.Id && r.body.MediaSourceId==='source-'+activeItem.Id),
             hasStart:!!start,hasProgress:progress.length>0,hasStop:!!stop,
             pauseReported:progress.some(r=>r.body.IsPaused===true),
             seekReported:progress.some(r=>r.body.PositionTicks>=18000000)});
     }
-    const queue = ['a','b'].map(suffix=>({Id:'fixture-next-'+suffix,ServerId:'fixture-server',Name:'Queue '+suffix,MediaType:'Video',Type:'Movie',Path:fixture,RunTimeTicks:50000000,UserData:{},MediaStreams:[]}));
+    const queueSidecar = mountSidecar || 'X:\\Media\\queue.y4m.strm';
+    const queue = ['a','b','c'].map(suffix=>({Id:'fixture-next-'+suffix,ServerId:'fixture-server',Name:'Queue '+suffix,MediaType:'Video',Type:'Movie',
+        Path:cd2Mode==='hit'?queueSidecar.replace(/[^\\/]+$/, 'queue-'+suffix+'.y4m.strm'):fixture,
+        RunTimeTicks:50000000,UserData:{},MediaStreams:[]}));
     queue.forEach(item=>items.set(item.Id,item));
     activeItem=queue[0];
     await manager.play({items:queue,fullscreen:true,startPositionTicks:0});
-    send('NextTrack');
+    const sourceBeforeNext = embedded.currentSrc();
+    const nextOne = manager.nextTrack();
+    await sleep(cd2Mode==='hit'?150:25);
+    const nextTwo = manager.nextTrack();
+    const nextSettled = await Promise.allSettled([nextOne,nextTwo]);
     for(let i=0;i<30 && !(records.some(r=>r.endpoint.endsWith('/Playing') && r.body.ItemId===queue[1].Id));i++) await sleep(100);
+    const sourceAfterNext = embedded.currentSrc();
+    function requestNumber(source) {
+        try {
+            const value = new URL(source).searchParams.get('cd2') || '';
+            const match = /play-(\d+)-/.exec(value);
+            return match ? Number(match[1]) : 0;
+        } catch (_) { return 0; }
+    }
     const next={selected:manager.currentItem().Id===queue[1].Id,
         priorStopped:records.some(r=>r.endpoint.endsWith('/Stopped') && r.body.ItemId===queue[0].Id),
-        nextStarted:records.some(r=>r.endpoint.endsWith('/Playing') && r.body.PlaySessionId==='play-'+queue[1].Id)};
+        nextStarted:records.some(r=>r.endpoint.endsWith('/Playing') && r.body.PlaySessionId==='play-'+queue[1].Id),
+        rapidNextSettled:nextSettled.every(value=>value.status==='fulfilled'),
+        rapidNewestLoaded:cd2Mode==='hit' ? requestNumber(sourceAfterNext)>requestNumber(sourceBeforeNext) : true};
     send('Stop'); await sleep(200);
-    return {results,next,records,calls};
+    let generation = null;
+    if (cd2Mode === 'hit') {
+        const sidecarBase = mountSidecar || 'X:\\Media\\fixture.y4m.strm';
+        const directOptions = (name, requestId) => ({
+            item:{Id:'generation-'+name,ServerId:'fixture-server',Name:'Generation '+name,MediaType:'Video',Type:'Movie',Path:sidecarBase.replace(/[^\\/]+$/,name+'.y4m.strm')},
+            mediaSource:{Id:'generation-source-'+name,Path:fixture,Container:'strm',MediaStreams:[],RunTimeTicks:50000000},
+            url:fixture,mediaType:'Video',fullscreen:false,playMethod:'DirectPlay',_etePlayRequestId:requestId
+        });
+        const first = embedded.play(directOptions('a', 9001));
+        await sleep(250);
+        const second = embedded.play(directOptions('b', 9002));
+        const rapid = await Promise.allSettled([first, second]);
+        const newestSource = embedded.currentSrc();
+        const beforeStop = newestSource;
+        const stoppedPending = embedded.play(directOptions('stop', 9003));
+        await sleep(150);
+        await embedded.stop();
+        const stopped = await Promise.allSettled([stoppedPending]);
+        await sleep(220);
+        generation = {
+            firstSuperseded:rapid[0].status==='rejected' && rapid[0].reason && rapid[0].reason.playbackSuperseded===true,
+            secondPlayed:rapid[1].status==='fulfilled' && newestSource.indexOf('play-9002-')>=0,
+            oldCoreListenerIgnored:rapid[0].status==='rejected',
+            stopSuperseded:stopped[0].status==='rejected' && stopped[0].reason && stopped[0].reason.playbackSuperseded===true,
+            stopPreventedLateLoad:embedded.currentSrc()===beforeStop,
+            noUnhandledRejection:!trace.some(value=>value.indexOf('rejection:')===0)
+        };
+    }
+    return {stopBeforePlayer,results,next,generation,records,calls};
 }

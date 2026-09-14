@@ -11,8 +11,9 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         var isStrm = result && result.isStrm === true ? 'yes' : 'no';
         var localExists = result && result.localExists === true ? 'yes' : 'no';
         var fallback = type === 'native' ? 'yes' : 'no';
+        var cd2Reason = result && result.cd2Reason ? result.cd2Reason : (type === 'url' ? 'cd2_hit' : 'not_attempted');
 
-        console.log('STRM resolver: invoked isStrm=' + isStrm + ' type=' + type + ' reason=' + reason + ' localExists=' + localExists + ' fallback=' + fallback);
+        console.log('STRM resolver: invoked isStrm=' + isStrm + ' type=' + type + ' reason=' + reason + ' cd2=' + cd2Reason + ' localExists=' + localExists + ' fallback=' + fallback);
     }
 
     function toDecimal(val) {
@@ -65,6 +66,88 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         var orgRefreshRate;
         var curRefreshRate;
         var refreshRates;
+        var playGeneration = 0;
+        var highestPlaybackRequestId = 0;
+        var activePlayRequest;
+
+        function supersededError() {
+            var error = new Error('Playback request was superseded');
+            error.name = 'PlaybackSuperseded';
+            error.playbackSuperseded = true;
+            return error;
+        }
+
+        function numericPlaybackRequestId(options) {
+            var value = Number(options && options._etePlayRequestId);
+            return Number.isSafeInteger(value) && value > 0 ? value : 0;
+        }
+
+        function cleanupCorePlaying(request) {
+            if (!request) return;
+            if (request.corePlayingListener) {
+                removeEventListener('core-playing', request.corePlayingListener);
+                request.corePlayingListener = null;
+            }
+            if (request.abortListener) {
+                request.controller.signal.removeEventListener('abort', request.abortListener);
+                request.abortListener = null;
+            }
+        }
+
+        function invalidatePlayRequest() {
+            playGeneration++;
+            if (activePlayRequest) {
+                var previous = activePlayRequest;
+                activePlayRequest = null;
+                previous.controller.abort();
+                cleanupCorePlaying(previous);
+            }
+        }
+
+        function beginPlayRequest(options) {
+            var playbackRequestId = numericPlaybackRequestId(options);
+            var request;
+
+            if (playbackRequestId && playbackRequestId < highestPlaybackRequestId) return null;
+            if (playbackRequestId) highestPlaybackRequestId = playbackRequestId;
+            invalidatePlayRequest();
+            request = {
+                generation: playGeneration,
+                playbackRequestId: playbackRequestId,
+                requestId: 'play-' + (playbackRequestId || 'local') + '-' + playGeneration,
+                controller: new AbortController(),
+                corePlayingListener: null,
+                abortListener: null
+            };
+            activePlayRequest = request;
+            return request;
+        }
+
+        function isCurrentPlayRequest(request) {
+            return !!request && activePlayRequest === request && request.generation === playGeneration &&
+                !request.controller.signal.aborted &&
+                (!request.playbackRequestId || request.playbackRequestId === highestPlaybackRequestId);
+        }
+
+        function assertCurrentPlayRequest(request) {
+            if (!isCurrentPlayRequest(request)) throw supersededError();
+        }
+
+        function waitForCorePlaying(request) {
+            return new Promise(function (resolve, reject) {
+                request.corePlayingListener = function () {
+                    if (!isCurrentPlayRequest(request)) return;
+                    cleanupCorePlaying(request);
+                    resolve();
+                };
+                request.abortListener = function () {
+                    cleanupCorePlaying(request);
+                    reject(supersededError());
+                };
+                addEventListener('core-playing', request.corePlayingListener);
+                request.controller.signal.addEventListener('abort', request.abortListener, {once: true});
+            });
+        }
 
         self.getRoutes = function () {
 
@@ -496,27 +579,47 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
             }
         };
 
-        self.play = async function (options) {
-            if (options.fullscreen && options.item.MediaType == 'Video') {
-                await embyRouter.showVideoOsd()
-            }
-            await displaySync();
-            await createMediaElement(options);
-            await new Promise((resolve, reject) => {
-                addEventListener('core-playing', resolve, { once: true })
-                playInternal(options);
-            })
-            if (libmpv && options.mediaType === 'Video') {
-                libmpv.style.opacity = 1;
-            }
-            if (videoDialog && appSettings.get('mpv-vo') && appSettings.get('mpv-vo') !== 'libmpv' && window.platform === 'win32') {
-                videoDialog.style.opacity = 0;
-            }
-            await showOsd(options);
-            if (window.enhancedDiagnostics) window.enhancedDiagnostics(libmpv, 'playing');
+        self.play = function (options) {
+            var request = beginPlayRequest(options);
+            if (!request) return Promise.reject(supersededError());
+            return playForRequest(options, request);
         };
 
-        async function playInternal(options) {
+        async function playForRequest(options, request) {
+            var corePlaying;
+
+            try {
+                assertCurrentPlayRequest(request);
+                if (options.fullscreen && options.item.MediaType == 'Video') {
+                    await embyRouter.showVideoOsd()
+                    assertCurrentPlayRequest(request);
+                }
+                await displaySync();
+                assertCurrentPlayRequest(request);
+                await createMediaElement(options);
+                assertCurrentPlayRequest(request);
+                corePlaying = waitForCorePlaying(request);
+                corePlaying.catch(function () { /* Awaited below; suppress early unhandled reporting on cancellation. */ });
+                await playInternal(options, request);
+                assertCurrentPlayRequest(request);
+                await corePlaying;
+                assertCurrentPlayRequest(request);
+                if (libmpv && options.mediaType === 'Video') {
+                    libmpv.style.opacity = 1;
+                }
+                if (videoDialog && appSettings.get('mpv-vo') && appSettings.get('mpv-vo') !== 'libmpv' && window.platform === 'win32') {
+                    videoDialog.style.opacity = 0;
+                }
+                await showOsd(options);
+                assertCurrentPlayRequest(request);
+                if (window.enhancedDiagnostics) window.enhancedDiagnostics(libmpv, 'playing');
+            } catch (error) {
+                cleanupCorePlaying(request);
+                throw error;
+            }
+        }
+
+        async function playInternal(options, request) {
 
             var item = options.item;
             mediaSource = options.mediaSource;
@@ -526,7 +629,7 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
             var resolverResult;
 
             try {
-                resolverResult = strmResolver.resolve({
+                resolverResult = await strmResolver.resolveAsync({
                     item: item,
                     mediaSource: mediaSource,
                     sidecarPath: item && item.Path,
@@ -535,9 +638,12 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
                     playMethod: options.playMethod,
                     streamInfo: options
                 }, {
-                    fs: typeof window !== 'undefined' ? window.fs : null
+                    fs: typeof window !== 'undefined' ? window.fs : null,
+                    requestId: request.requestId,
+                    signal: request.controller.signal
                 });
             } catch (err) {
+                if (err && (err.name === 'AbortError' || err.playbackSuperseded)) throw supersededError();
                 resolverResult = {
                     type: 'native',
                     source: nativeSource,
@@ -548,11 +654,13 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
                 };
             }
 
+            assertCurrentPlayRequest(request);
             if (resolverResult && typeof resolverResult.source === 'string') {
                 url = resolverResult.source;
             }
             logStrmResolverResult(resolverResult);
 
+            assertCurrentPlayRequest(request);
             currentSrc = url;
             currentAspectRatio = 'auto'
 
@@ -660,18 +768,23 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
 
 
             await setProperty(Object.assign(playerOptions, audioDelay(), interlace(), createClosedCaptionTrack(mediaSource, isVideo), getMpvAudioOptions(mediaType)))
+            assertCurrentPlayRequest(request);
             await sendCommand(['loadfile', url])
+            assertCurrentPlayRequest(request);
 
             if (mediaSource.DefaultAudioStreamIndex && playMethod != 'Transcode') {
                 await setAudioStream(mediaSource.DefaultAudioStreamIndex);
+                assertCurrentPlayRequest(request);
             }
 
             var subtitleIndexToSet = mediaSource.DefaultSubtitleStreamIndex == null ? -1 : mediaSource.DefaultSubtitleStreamIndex;
             await setSubtitleStream(subtitleIndexToSet)
+            assertCurrentPlayRequest(request);
             await setProperty({
                 start: `${Math.floor(startPositionTicks / 10000000)}`,
                 pause: false
             })
+            assertCurrentPlayRequest(request);
         }
 
         async function showOsd(options) {
@@ -732,6 +845,7 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         };
 
         self.stop = async function (destroyPlayer) {
+            invalidatePlayRequest();
             if (destroyPlayer) {
                 await destroyInternal()
             } else {
@@ -1028,6 +1142,8 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         };
 
         function destroyInternal() {
+
+            invalidatePlayRequest();
 
             embyRouter.setTransparency('none');
 

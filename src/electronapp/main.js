@@ -81,6 +81,19 @@
         return null;
     }
 
+    var cd2Service = require('./enhanced/cd2-service').createService({environment: process.env});
+    ['ETE_CD2_ENABLED', 'ETE_CD2_ORIGIN', 'ETE_CD2_TOKEN', 'ETE_CD2_LOCAL_PREFIX', 'ETE_CD2_CLOUD_PREFIX'].forEach(function (name) {
+        delete process.env[name];
+    });
+    var unregisterCd2Ipc = require('./enhanced/cd2-ipc').register({
+        ipcMain: ipcMain,
+        service: cd2Service,
+        getWebContents: getWebContents
+    });
+    app.once('before-quit', function () {
+        unregisterCd2Ipc();
+    });
+
     function onWindowMoved() {
 
         sendJavascript('window.dispatchEvent(new CustomEvent("move", {}));');

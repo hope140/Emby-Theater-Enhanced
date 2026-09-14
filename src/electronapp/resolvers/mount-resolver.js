@@ -47,6 +47,10 @@
         );
     }
 
+    function isPosixLocalPath(value) {
+        return typeof value === 'string' && /^\/(?!\/)/.test(value);
+    }
+
     function basename(value) {
         var lastSlash;
 
@@ -225,11 +229,9 @@
         };
     }
 
-    function resolve(context, dependencies) {
+    function visitCandidates(context, dependencies, visitor) {
         var sidecarPath = context && context.sidecarPath;
         var sourcePath = context && context.sourcePath;
-        var nativeSource = context && context.nativeSource;
-        var fileSystem = getFileSystem(dependencies);
         var candidates = [];
         var sidecarStem;
         var parsedUrl;
@@ -237,64 +239,88 @@
         var queryFileName;
         var result;
 
-        function checkCandidate(value) {
+        function addCandidate(value) {
             if (typeof value === 'string' && value && candidates.indexOf(value) < 0) {
                 candidates.push(value);
-                if (exists(fileSystem, value)) {
-                    return makeResult('local', value, 'mount_hit', true);
-                }
+                return visitor ? visitor(value) : null;
             }
 
             return null;
         }
 
         sidecarStem = deriveSidecarStem(sidecarPath);
-        result = checkCandidate(sidecarStem);
+        result = addCandidate(sidecarStem);
         if (result) {
-            return result;
+            return {candidates: candidates, result: result, failed: false};
         }
 
-        if (isWindowsLocalPath(sourcePath)) {
+        if (isWindowsLocalPath(sourcePath) || isPosixLocalPath(sourcePath)) {
             if (hasMediaExtension(sourcePath)) {
-                result = checkCandidate(sourcePath);
+                result = addCandidate(sourcePath);
                 if (result) {
-                    return result;
+                    return {candidates: candidates, result: result, failed: false};
                 }
             }
         } else if (typeof sourcePath === 'string' && sourcePath) {
             parsedUrl = parseSourceUrl(sourcePath, dependencies);
             if (parsedUrl.failed) {
-                return makeResult('native', nativeSource, 'parse_failed', false);
+                return {candidates: candidates, result: null, failed: true};
             }
 
             urlFileName = getUrlFileName(parsedUrl.value);
             if (urlFileName.failed) {
-                return makeResult('native', nativeSource, 'parse_failed', false);
+                return {candidates: candidates, result: null, failed: true};
             }
             if (urlFileName.value) {
-                result = checkCandidate(joinSibling(sidecarPath, urlFileName.value));
+                result = addCandidate(joinSibling(sidecarPath, urlFileName.value));
                 if (result) {
-                    return result;
+                    return {candidates: candidates, result: result, failed: false};
                 }
             }
 
             queryFileName = getQueryFileName(parsedUrl.value);
             if (queryFileName.failed) {
-                return makeResult('native', nativeSource, 'parse_failed', false);
+                return {candidates: candidates, result: null, failed: true};
             }
             if (queryFileName.value) {
-                result = checkCandidate(joinSibling(sidecarPath, queryFileName.value));
+                result = addCandidate(joinSibling(sidecarPath, queryFileName.value));
                 if (result) {
-                    return result;
+                    return {candidates: candidates, result: result, failed: false};
                 }
             }
         }
 
+        return {candidates: candidates, result: null, failed: false};
+    }
+
+    function getCandidates(context, dependencies) {
+        return visitCandidates(context, dependencies).candidates;
+    }
+
+    function resolve(context, dependencies) {
+        var nativeSource = context && context.nativeSource;
+        var fileSystem = getFileSystem(dependencies);
+        var visited = visitCandidates(context, dependencies, function (candidate) {
+            // Absolute POSIX paths can be server-side source identities on a
+            // Windows client. They remain CD2 candidates, but must never be
+            // probed through the local Windows filesystem.
+            if (isPosixLocalPath(candidate)) {
+                return null;
+            }
+            return exists(fileSystem, candidate)
+                ? makeResult('local', candidate, 'mount_hit', true)
+                : null;
+        });
+
+        if (visited.result) return visited.result;
+        if (visited.failed) return makeResult('native', nativeSource, 'parse_failed', false);
         return makeResult('native', nativeSource, 'mount_missing', false);
     }
 
     return {
         deriveSidecarStem: deriveSidecarStem,
+        getCandidates: getCandidates,
+        isPosixLocalPath: isPosixLocalPath,
         isWindowsLocalPath: isWindowsLocalPath,
         resolve: resolve
     };

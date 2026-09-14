@@ -7,8 +7,17 @@ window.eteAcceptance = (function(){
     function sourceKind(source){
         if(typeof source!=='string' || !source)return 'missing';
         if(/^[A-Za-z]:[\\/]/.test(source) || /^\\\\/.test(source) || /^\/\/[^\/]/.test(source))return 'local';
-        if(/^https?:\/\//i.test(source))return 'url';
+        if(/^\//.test(source))return 'posix';
+        if(/^https?:\/\//i.test(source)){
+            try{if(window.__eteExpectedCd2Origin&&new URL(source).origin===new URL(window.__eteExpectedCd2Origin).origin)return 'cd2-url';}catch(e){}
+            return 'url';
+        }
         return 'other';
+    }
+    function localPrefixMatches(value, prefix){
+        if(typeof value!=='string'||typeof prefix!=='string'||!prefix)return false;
+        var root=prefix.replace(/[\\/]+$/,'');
+        return value===root||value.indexOf(root+'/')===0;
     }
     async function until(fn,limit=15000){
         const start=Date.now();
@@ -77,7 +86,7 @@ window.eteAcceptance = (function(){
                 Fields:'Path,MediaSources',SortBy:'DateCreated',SortOrder:'Descending',Filters:'IsUnplayed'});
             items=result.Items.filter(item=>typeof item.Path==='string'&&item.Path.toLowerCase().endsWith('.strm')&&item.RunTimeTicks>1200000000).slice(0,2);
             if(items.length<2)return {ok:false,reason:'not-enough-strm-samples',scanned:result.Items.length};
-            return {ok:true,scanned:result.Items.length,samples:items.map(i=>{const source=(i.MediaSources||[])[0]||{};return {id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,sourceCount:i.MediaSources&&i.MediaSources.length,sourcePathKind:sourceKind(source.Path),container:String(source.Container||'').toLowerCase()||'missing'};})};
+            return {ok:true,scanned:result.Items.length,samples:items.map(i=>{const source=(i.MediaSources||[])[0]||{};return {id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,itemPathKind:sourceKind(i.Path),itemPathPrefixMatch:localPrefixMatches(i.Path,window.__eteExpectedCd2LocalPrefix),sourceCount:i.MediaSources&&i.MediaSources.length,sourcePathKind:sourceKind(source.Path),sourcePathPrefixMatch:localPrefixMatches(source.Path,window.__eteExpectedCd2LocalPrefix),container:String(source.Container||'').toLowerCase()||'missing'};})};
         },
         async play(){
             authorizedPlayback=true;

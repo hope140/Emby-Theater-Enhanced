@@ -1,5 +1,73 @@
 # 开发日志
 
+## 2026-09-14 — single-prefix mapping 与真实 Emby CD2 验收完成
+
+继续 `feat/cd2-resolver`，没有改产品 resolver、PlaybackManager、Session/WebSocket 或 libmpv。使用同一个 persistent acceptance profile，先对两个有限 STRM 样本做脱敏只读诊断：两个 `Item.Path`/`MediaSource.Path` 关系可由同一条 source-side POSIX prefix → cloud prefix 表示，relative suffix 保持；`mapLocalPath` 的边界、`..` 拒绝和 POSIX case sensitivity 通过。两个候选 CD2 target 均为 regular file，`FindFileByPath` 与 `GetDownloadUrlPath(get_direct_url=false)` 成功，HEAD 200、Range 206、无重定向。实际 mapping 只写入 ignored local acceptance 配置，未进入源码、文档、fixture、acceptance report 或 Git。
+
+使用该 ignored mapping 重跑真实 Emby acceptance。两个样本 resolver 均返回 `type=url`、`reason=cd2_hit`、`source kind=cd2-url`；embedded libmpv/core-playing 与 playback advancing 通过。真实 inspect 为 `logged-in`、非管理员、Session 可见、WebSocket 在线、远控有效；Play、Pause、Seek、Resume、NextTrack、Stop 全部通过，两个 Item/MediaSource/PlaySession identity 由实际开始/停止报告保持，10 条报告全部接受，Stop 后 NowPlayingItem 清空。一次首请求 cold timeout 在重复运行中未复现，最终验收以两个样本均 `cd2_hit` 的重复结果为准。
+
+没有修改服务器、CD2 配置、mount、cache、账号、媒体库或网盘数据；没有新增 multi-mapping、retry、refresh、DirectUrl、headers、音轨或设置 UI。未发现新的跨层生命周期、Session identity 或 PlaybackManager/libmpv correctness 问题，没有升级到 Sol High。
+
+Model Tier: 1
+Model: current Codex session
+Reason: explicit single-prefix mapping contract and bounded real acceptance rerun
+Escalated: no
+
+## 2026-09-14 — persistent profile inspect 修正与 PR #2 真实验收复核
+
+保持 `feat/cd2-resolver`，先复核 worker 未提交 diff，再补充 persistent profile inspect 的 targeted test 和 POSIX Mount 边界回归。`inspectAcceptanceProfile` 现在必须同时取得 API client 并成功解析 `getCurrentUser()` 用户对象才报告 `loggedIn=true`；拒绝、超时、空用户、缺少 API、loader/client 异常统一收敛为安全枚举，结果字段仅有 `loggedIn` 与 `reason`。`accept-live.ps1` 使用 LocalApplicationData 下的固定 acceptance profile，profile 不存在、inspect 失败和手动登录入口均不回显 profile 路径或认证材料。
+
+POSIX 回归确认 absolute `MediaSource.Path` 仍作为 CD2 candidate 发送；CD2 miss 后不会进入 Windows `existsSync` Mount flow。UNC source 仍可在存在时命中 Mount。Node tests 为 43/43，JS/PowerShell 语法和 `git diff --check` 通过；当前工作区源码构建的隔离 runtime 为 2156 个 manifest payload（含 `build-manifest.json` 共 2157 个文件），runtime `mount-resolver.js` 与 source hash 一致并包含 POSIX guard。
+
+同一个 persistent profile 的真实 inspect 返回 `logged-in`。随后真实 Emby acceptance 选择两个 POSIX STRM 样本，inspect、Session/WebSocket、Play、Pause、Seek、Resume、NextTrack、Stop 和 10 条真实播放报告全部通过；resolver 两次记录 `cd2=mapping_miss` → `mount_missing` → native URL。脱敏 select 复核显示两个 `Item.Path` 命中当前 sidecar 前缀，但两个 `MediaSource.Path` 未命中当前 source-side mapping，因此没有把 native fallback 记为真实 CD2 source hit。
+
+当前剩余 blocker 是与实际 `MediaSource.Path` 匹配的 POSIX→CD2 source mapping 未确认。没有修改服务器、CD2、mount、cache、账号、媒体库或网盘数据；没有发现新的跨层生命周期、Session identity 或 PlaybackManager/libmpv correctness 问题，没有升级到 Sol High。
+
+Model Tier: 2
+Model: current Codex session
+Reason: persistent acceptance, real Emby Session/WebSocket/control evidence, and resolver source-identity boundary
+Escalated: no
+
+## 2026-09-13 — PR #2 merge-blocker 修正与真实媒体诊断
+
+保持 `feat/cd2-resolver`，没有同步 `origin/main`，也没有修改另一会话正在维护的 `AGENTS.md` 或 `docs/AI_MODEL_POLICY.md`。本轮关闭三个代码 blocker：仅 terminal `PlaybackManager.prototype.stop()` 增加 request invalidation，新 Play 内部 previous-player stop 不受影响；非 Abort 的 IPC/transport reject 转为安全 `transport_error` miss 后继续 Mount → Native，Abort 仍向上终止；空/缺失 cloudPrefix 为 `missing_mapping`，显式 `/` 保持合法。
+
+真实 Emby 只读选择新增证据：两个 STRM 样本的 Item.Path 与 MediaSource.Path 都是 absolute POSIX，而不是 Windows drive/UNC。现有 ETLP `src→dst` 与 `dst→cloud` 两段单规则可安全折叠。因此单条 mapping 扩展为 Windows drive/UNC 或 absolute POSIX local prefix；Windows/UNC 大小写不敏感，POSIX 大小写敏感，边界与 `..` 检查一致。带 allowlisted 媒体后缀的 absolute POSIX MediaSource.Path 成为确定性 CD2 candidate，在 Windows Mount 中仍自然 miss；未增加第二条 mapping、regex、扫描或自动学习。
+
+targeted tests 为 38/38。独立 frozen Stop-before-player 测试使 PlaybackInfo pending，执行真实 PlaybackManager Stop 后再释放响应，断言 Promise 收束、`player.play` 未调用、无 Playing report。transport reject 分别验证 Mount 与 Native，Abort 不 fallback；cloudPrefix 空/显式 root 与 POSIX 边界均覆盖。完整 CD2 hit、Mount、Native、generation/cancel、双 NextTrack 和报告回归串行通过；其中一次可见 Electron 在 STRM 阶段偶发超时，同参数串行复跑通过并保留失败证据。
+
+真实 CD2 media 诊断使用有限 80 目录/2000 entry 范围内的普通 `mkv-medium`。final frozen runtime 观察到 resolved path 被 mpv 接受、file-format=MKV、13 tracks（1 video/1 audio）、`core-playing` event、`core-idle=false`、cache state/time 与 time-pos 推进，未观察到 EOF/error。Pepper bridge 不暴露 start-file/file-loaded/end-file/log-message，所以 start/end 标记为不可直接观察，file-loaded 由 format+track list 推断。默认音视频轨存在，本轮未处理用户另报的手动音轨问题。
+
+真实 Emby 全链只在独立 media 成功后尝试。两次均在 inspect 阶段返回 `not-logged-in`，未选择播放、未触发 CD2、未产生新 Playing/Progress/Stopped；0 残留进程。因此真实 Emby CD2 hit、Session、WebSocket、controls、reports 保持未验收，原因是当前登录态不可用，不是 media/core-playing 失败。
+
+最终候选与 repeat 各 2156 个 manifest 载荷、0 SHA256 差异、0 runtime native addon。隔离 installer SHA256 与 payload 结果见最新 Packaging/Testing 记录。本轮未修改 CD2 配置、mount、cache、账号、媒体、Emby metadata、权限或服务器配置。
+
+Model Tier: 2
+Model: GPT-5.6 Sol
+Reason: merge-blocking PlaybackManager race, resolver fallback correctness, real mpv event diagnosis and real Emby acceptance
+Escalated: no
+
+## 2026-09-13 — CloudDrive2 Resolver PR #2 实现与验证
+
+从已推送的 `main` 文档基线 `6888780` 创建 `feat/cd2-resolver`。本轮实现 `CD2 same-origin HTTP → Mount → Native`，Transcode 永远 Native；没有实现 DirectUrl、User-Agent/additionalHeaders、expiresIn recovery、115 Open API、refresh/retry、复杂 mapping、设置 UI、自动发现或 cache 管理。
+
+产品实现：精确锁定 `@grpc/grpc-js@1.14.4` 与 `@grpc/proto-loader@0.8.1`；Electron main process 持有 token、proto、channel、metadata 与 active calls，renderer 只通过可信 sender 的 `resolve/cancel` IPC。main 完成同步读取/预加载后立即删除 `process.env` 中全部 `ETE_CD2_*` 输入，防止 renderer 继承 token、origin 或 mapping。V1 使用 Apache-2.0 ETLP beta 快照中的最小 CloudDrive2 1.0.13 wire schema，SHA256 固定；官方下载的 1.0.14 proto 已做 diff，两个 V1 RPC 与关键 field numbers 未变化。单条 mapping 支持 drive/UNC、大小写不敏感、严格边界、拒绝 `..`，cloud path 使用 POSIX normalize。只调用 `FindFileByPath` 与 `GetDownloadUrlPath(get_direct_url=false)`，只接受同 scheme/host/port HTTP(S) URL。
+
+异步生命周期：PlaybackManager build overlay 为每次播放生成 request id，并在异步阶段和 `player.play` 前拒绝 stale request；libmpv 在 `self.play` 开头同步建立 monotonic generation/AbortController。新 Play、NextTrack、Stop、destroy 会 invalidate 旧 generation、取消 active unary call并移除旧 `core-playing` listener；每个 await、fallback、`currentSrc` 与 `loadfile` 前复核。readiness 200ms、Find 350ms、download 300ms 共用 750ms absolute budget；grpc/proto 在 CD2 enabled 时于 main 启动预加载，connection-refused 的 playback 阶段断言在 500ms 内 fallback，冷 require/parse 时间不计入起播 budget。
+
+自动验证：Node 33/33；修改 JS 与 build overlay 输出语法通过。fake HTTP 覆盖 200/206/404/500/timeout/307；fake gRPC 覆盖 found/missing/directory/UNAVAILABLE/deadline/slow/late/malformed/cancel。frozen Electron 18.3.15 / Node 16.13.2 中 grpc-js/proto-loader require、Bearer metadata、两个 unary RPC、same-origin result 和 0 native addon 通过。CD2 hit fixture 验证 7 resolve、3 active cancel、0 active leak，A→B、Stop、旧 core listener、双 NextTrack 只允许最新 source；Play/Pause/Seek/Unpause/NextTrack/Stop、Item/MediaSource/MediaSourceId/PlaySessionId 与 19 条模拟报告保持。CD2 miss → Mount 与 CD2 miss → Native 分别通过。
+
+构建与 installer：最终 `pr2-k/l` 各 2156 个 manifest 载荷，逐文件 SHA256 0 差异；连 build-manifest 共 2157 文件，production closure 为 33 个纯 JS package、0 `.node` addon。隔离 Inno setup 编译成功，SHA256 `7db35eb258a4c245e04c55fc3fa04d34ee18724be650330fdb581ecbf76cd515`；innounp 解包的 2157 个 `{app}` 文件与 `pr2-k` runtime 全部逐哈希一致。本轮未运行 installer 或修改系统安装。
+
+真实 CD2：仅在内存读取既有 token，临时 mapping 命中；最终 frozen runtime 的 `FindFileByPath`、`GetDownloadUrlPath(false)`、same-origin HEAD 200、Range 206、无重定向通过。没有修改 CD2 设置、mount、cache、账号或网盘数据。真实 CD2 source 已在隔离播放器中成为 `currentSrc`，但同一样本在 45 秒内未产生 `core-playing`；因此 real Enhanced CD2 playback 未通过，真实 Emby Session/WebSocket/controls/reports 未执行。两次此类超时均保留在 ignored `.work`，不写入公开敏感细节。
+
+曾有一次并行启动两个可见 Electron fixture 导致 Mount suite 超时；按既有规则清理确认 0 残留进程后串行重跑通过。另有测试编排的 drive-root 与拼写错误在发出媒体请求前安全失败，修正后真实只读 smoke 通过，均未当作产品成功证据。
+
+Model Tier: 2
+Model: GPT-5.6 Sol
+Reason: main-process gRPC, renderer/main IPC, PlaybackManager and libmpv generation, native fallback and frozen runtime packaging span multiple layers
+Escalated: no; this task started at the approved Tier 2 level
+
 ## 2026-09-13 — CloudDrive2 Resolver Sol High 架构评审
 
 在 `main == origin/main == 7670d42`、工作区仅有既有调研文档改动的基线上完成 Tier 2 / Sol High 评审。本轮没有修改 `src/`、`package.json`、CD2 配置/mount/cache、Emby/服务器配置或网盘数据，没有执行 refresh、真实 Enhanced 播放、分支、commit、PR、发布或安装。

@@ -10,6 +10,7 @@
 
 - Windows PowerShell 5.1 执行所有 ps1，脚本内容保持 ASCII；读取含中文的 JSON 显式 UTF8。
 - 本地开发 Node + 固定 `node-unrar-js 2.0.2`，根 package-lock.json 锁定。
+- CloudDrive2 runtime 固定 `@grpc/grpc-js` 1.14.4 与 `@grpc/proto-loader` 0.8.1；构建只复制 lockfile 的 production dependency closure，当前为 33 个纯 JavaScript package、0 个 `.node` addon。
 - Inno Setup 6.7.3。官方安装 EXE Authenticode 验证有效，签名者 Pyrsys B.V.；只用项目内 innounp 解包，没有安装或修改系统 PATH。
 - Python 仅用于可选 DLL 身份 probe，无 pip 新依赖。
 
@@ -26,13 +27,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1
 
 prepare 核对两个输入归档的 SHA256，解包到 vendor。build 核对 manifest 中每个 vendor 文件 → 复制原目录 → 用 src/electronapp 覆盖应用层 → 替换指定 libmpv → 写 Enhanced package 元数据、独立 ProgramDataPath、启动入口与 build-manifest。mpv.conf、shader、字体不写入个人目录。
 
+CD2 阶段在源码覆盖后执行两项确定性步骤：`copy-runtime-dependencies.cjs` 从根 lockfile 复制 production closure 到输出 `electronapp/node_modules` 并拒绝 native addon；`patch-playbackmanager.cjs` 对未公开的 frozen Web snapshot 应用锚点唯一的 request-generation overlay，锚点数量不符即停止构建。runtime 不依赖开发机 `electronapp/node_modules` 的偶然内容，不执行 native rebuild 或 node-gyp。
+
 保留实际布局 `Emby.Theater.exe`、`electronapp/libmpv/x64`、`x64/electron`。任务书中的 runtime/libmpv/plugins 分拆仅是示意；现有宿主和 Pepper 注册依赖相对路径，首期迁移目录会增加无关风险。
 
 package 校验 build-manifest 中的全部载荷及额外文件，调用 Inno 编译到 `dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe`。当前 runtime 为 `dist/EmbyTheaterEnhanced-0.1.1-final-win-x64`，传 `-RuntimeName` 选择。安装目标独立于 Carnival，安装器保留稳定 AppId；显式可选桌面快捷方式，开始菜单入口使用 Start-Enhanced.ps1。卸载不删除个人 mpv 配置和 Enhanced 用户数据。
 
 ## 可重复性
 
-第一轮两次分别构建到不同输出目录，1013 个文件（含 build-manifest）SHA256 全部相同。这里的可重复是 runtime 载荷一致，未声称 setup.exe 位级确定性或 native binary 源码重建。
+第一轮两次分别构建到不同输出目录，1013 个文件（含 build-manifest）SHA256 全部相同。CD2 merge review 的 final/repeat runtime 各有 2156 个 manifest 载荷，逐文件 SHA256 0 差异；连同 `build-manifest.json` 实际为 2157 文件。这里的可重复是 runtime 载荷一致，未声称 setup.exe 位级确定性或 native binary 源码重建。
+
+PR #2 merge review 的隔离 installer 候选已编译并用 innounp 解包，2157 个 `{app}` 文件与 final runtime 逐文件哈希一致，grpc-js、proto 存在且 production dependency closure 中没有 native addon。本轮没有运行安装器或执行系统安装。
 
 build 拒绝覆盖已有目录；重复构建使用 `-OutputName`。package 同样拒绝覆盖已有 setup。旧产物应由用户保留或在明确范围内处理，脚本不执行递归删除。
 

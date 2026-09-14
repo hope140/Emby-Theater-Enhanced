@@ -248,3 +248,250 @@ test('DirectStream can use a deterministic existing mount while preserving fallb
         fixture.cleanup();
     }
 });
+
+test('absolute POSIX media source is a deterministic CD2 candidate', async () => {
+    const fixture = createFixture('Episode.strm', '/srv/media/Show/E01.mkv');
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {
+            fs,
+            requestId: 'posix-candidate',
+            cd2Transport: {
+                resolve: async request => {
+                    assert.deepEqual(request.candidates, ['/srv/media/Show/E01.mkv']);
+                    return {status: 'hit', type: 'url', source: 'http://127.0.0.1:19798/source'};
+                }
+            }
+        });
+        assert.equal(result.type, 'url');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('a POSIX source candidate never enters the Mount existsSync flow after a CD2 miss', async () => {
+    const fixture = createFixture('Episode.strm', '/srv/media/Show/E01.mkv');
+    const probed = [];
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {
+            fs: {
+                existsSync: value => {
+                    probed.push(value);
+                    return value === fixture.sourcePath;
+                }
+            },
+            requestId: 'posix-miss',
+            cd2Transport: {
+                resolve: async request => {
+                    assert.deepEqual(request.candidates, [fixture.sourcePath]);
+                    return {status: 'miss', reason: 'unavailable'};
+                }
+            }
+        });
+
+        assert.equal(result.type, 'native');
+        assert.equal(result.source, fixture.nativeSource);
+        assert.equal(result.cd2Reason, 'unavailable');
+        assert.deepEqual(probed, []);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('UNC local source paths still resolve through Mount when they exist', () => {
+    const fixture = createFixture('Mounted.strm', '\\\\server\\share\\Mounted.mkv');
+    const sourcePath = '\\\\server\\share\\Mounted.mkv';
+    const result = strmResolver.resolve({
+        item: {Path: fixture.sidecarPath},
+        mediaSource: {Path: sourcePath, Container: 'strm'},
+        url: fixture.nativeSource,
+        playMethod: 'DirectPlay'
+    }, {
+        fs: {existsSync: value => value === sourcePath}
+    });
+
+    try {
+        assert.equal(result.type, 'local');
+        assert.equal(result.source, sourcePath);
+        assert.equal(result.reason, 'mount_hit');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('async STRM resolution prefers CD2 URL over an existing Mount candidate', async () => {
+    const fixture = createFixture('Movie.mkv.strm');
+    const local = path.join(fixture.directory, 'Movie.mkv');
+    fs.writeFileSync(local, 'fixture');
+
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {
+            fs,
+            requestId: 'play-1',
+            cd2Transport: {
+                resolve: async request => {
+                    assert.equal(request.candidates[0], local);
+                    return {status: 'hit', type: 'url', source: 'http://127.0.0.1:19798/source'};
+                }
+            }
+        });
+
+        assert.equal(result.type, 'url');
+        assert.equal(result.reason, 'cd2_hit');
+        assert.equal(result.isStrm, true);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('async CD2 miss falls through to Mount and then Native', async () => {
+    const mountFixture = createFixture('Movie.mkv.strm');
+    const local = path.join(mountFixture.directory, 'Movie.mkv');
+    fs.writeFileSync(local, 'fixture');
+    const transport = {resolve: async () => ({status: 'miss', reason: 'unavailable'})};
+
+    try {
+        const mounted = await strmResolver.resolveAsync({
+            item: {Path: mountFixture.sidecarPath},
+            mediaSource: {Path: mountFixture.sourcePath, Container: 'strm'},
+            url: mountFixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {fs, requestId: 'play-2', cd2Transport: transport});
+        assert.equal(mounted.type, 'local');
+        assert.equal(mounted.source, local);
+    } finally {
+        mountFixture.cleanup();
+    }
+
+    const nativeFixture = createFixture('Missing.mkv.strm');
+    try {
+        const native = await strmResolver.resolveAsync({
+            item: {Path: nativeFixture.sidecarPath},
+            mediaSource: {Path: nativeFixture.sourcePath, Container: 'strm'},
+            url: nativeFixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {fs, requestId: 'play-3', cd2Transport: transport});
+        assert.equal(native.type, 'native');
+        assert.equal(native.source, nativeFixture.nativeSource);
+    } finally {
+        nativeFixture.cleanup();
+    }
+});
+
+test('Transcode never invokes async CD2 transport', async () => {
+    const fixture = createFixture('Movie.mkv.strm');
+    let invoked = false;
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'Transcode'
+        }, {fs, requestId: 'play-4', cd2Transport: {resolve: async () => { invoked = true; }}});
+        assert.equal(result.type, 'native');
+        assert.equal(result.reason, 'transcode_skip');
+        assert.equal(invoked, false);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('aborted async CD2 request is cancelled and never reaches fallback', async () => {
+    const fixture = createFixture('Movie.mkv.strm');
+    const controller = new AbortController();
+    let resolveTransport;
+    let cancelled = false;
+    const pending = strmResolver.resolveAsync({
+        item: {Path: fixture.sidecarPath},
+        mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+        url: fixture.nativeSource,
+        playMethod: 'DirectPlay'
+    }, {
+        fs,
+        requestId: 'play-5',
+        signal: controller.signal,
+        cd2Transport: {
+            resolve: () => new Promise(resolve => { resolveTransport = resolve; }),
+            cancel: () => { cancelled = true; resolveTransport({status: 'cancelled', reason: 'cancelled'}); }
+        }
+    });
+    controller.abort();
+    await assert.rejects(pending, error => error && error.name === 'AbortError');
+    assert.equal(cancelled, true);
+    fixture.cleanup();
+});
+
+test('rejected CD2 transport still falls through to an existing Mount candidate', async () => {
+    const fixture = createFixture('Rejected.mkv.strm');
+    const local = path.join(fixture.directory, 'Rejected.mkv');
+    fs.writeFileSync(local, 'fixture');
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {fs, requestId: 'reject-mount', cd2Transport: {resolve: () => Promise.reject(new Error('synthetic transport failure'))}});
+        assert.equal(result.type, 'local');
+        assert.equal(result.source, local);
+        assert.equal(result.cd2Reason, 'transport_error');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('rejected CD2 transport falls through to Native when Mount is missing', async () => {
+    const fixture = createFixture('Rejected.mkv.strm');
+    try {
+        const result = await strmResolver.resolveAsync({
+            item: {Path: fixture.sidecarPath},
+            mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+            url: fixture.nativeSource,
+            playMethod: 'DirectPlay'
+        }, {fs, requestId: 'reject-native', cd2Transport: {resolve: () => Promise.reject(new Error('synthetic transport failure'))}});
+        assert.equal(result.type, 'native');
+        assert.equal(result.source, fixture.nativeSource);
+        assert.equal(result.cd2Reason, 'transport_error');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('rejected transport after abort never reaches Mount fallback', async () => {
+    const fixture = createFixture('Aborted.mkv.strm');
+    const local = path.join(fixture.directory, 'Aborted.mkv');
+    fs.writeFileSync(local, 'fixture');
+    const controller = new AbortController();
+    let rejectTransport;
+    const pending = strmResolver.resolveAsync({
+        item: {Path: fixture.sidecarPath},
+        mediaSource: {Path: fixture.sourcePath, Container: 'strm'},
+        url: fixture.nativeSource,
+        playMethod: 'DirectPlay'
+    }, {
+        fs,
+        requestId: 'reject-abort',
+        signal: controller.signal,
+        cd2Transport: {
+            resolve: () => new Promise((resolve, reject) => { rejectTransport = reject; }),
+            cancel: () => rejectTransport(new Error('cancelled transport'))
+        }
+    });
+    controller.abort();
+    await assert.rejects(pending, error => error && error.name === 'AbortError');
+    fixture.cleanup();
+});

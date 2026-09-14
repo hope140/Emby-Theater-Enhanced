@@ -1,7 +1,9 @@
-param([string]$RuntimeName = 'EmbyTheaterEnhanced-win-x64', [switch]$TestMedia, [switch]$Visible, [switch]$TestPipeline, [switch]$TestMount)
+param([string]$RuntimeName = 'EmbyTheaterEnhanced-win-x64', [switch]$TestMedia, [switch]$Visible, [switch]$TestPipeline, [switch]$TestMount, [switch]$TestCd2, [switch]$TestCd2Miss, [switch]$TestStopBeforePlayer)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if ($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid runtime name.' }
+if ($TestStopBeforePlayer) { $TestPipeline = $true }
+if (($TestCd2 -or $TestCd2Miss) -and -not $TestPipeline) { throw 'CD2 runtime tests require -TestPipeline.' }
 $runtime = Join-Path (Join-Path $root 'dist') $RuntimeName
 $evidence = Join-Path $root ('.work/runtime-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $evidence 'profile'),(Join-Path $evidence 'appdata') -Force | Out-Null
@@ -32,16 +34,20 @@ if ($TestMedia -or $TestPipeline) {
     $info.EnvironmentVariables['MPV_HOME'] = Join-Path $evidence 'appdata/mpv'
 }
 if ($TestPipeline) { $info.EnvironmentVariables['ETE_TEST_PIPELINE'] = '1' }
+if ($TestStopBeforePlayer) { $info.EnvironmentVariables['ETE_TEST_STOP_BEFORE_PLAYER'] = '1' }
+if ($TestCd2) { $info.EnvironmentVariables['ETE_TEST_CD2_MODE'] = 'hit'; $info.EnvironmentVariables['ETE_TEST_CD2_EXPECT'] = 'hit' }
+if ($TestCd2Miss) { $info.EnvironmentVariables['ETE_TEST_CD2_MODE'] = 'miss'; $info.EnvironmentVariables['ETE_TEST_CD2_EXPECT'] = 'miss' }
 if ($TestPipeline) {
     foreach ($proxyName in @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy')) { $info.EnvironmentVariables.Remove($proxyName) }
     $info.EnvironmentVariables['NO_PROXY'] = '127.0.0.1,localhost'
 }
 $info.EnvironmentVariables.Remove('ELECTRON_RUN_AS_NODE')
 $process = [Diagnostics.Process]::Start($info)
-if (-not $process.WaitForExit(35000)) { $process.Kill(); throw 'Runtime smoke did not exit within 35 seconds.' }
+$waitMs = if ($info.EnvironmentVariables['ETE_TEST_CD2_EXPECT'] -eq 'real') { 55000 } else { 35000 }
+if (-not $process.WaitForExit($waitMs)) { $process.Kill(); throw 'Runtime smoke did not exit within its bounded timeout.' }
 $result = Get-Content -LiteralPath (Join-Path $evidence 'electron-smoke.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($result.state -and $result.state.pipeline) {
-    [ordered]@{ok=$result.ok;results=$result.state.pipeline.results;next=$result.state.pipeline.next;reportCount=$result.state.pipeline.records.Count} | ConvertTo-Json -Depth 6 | Write-Output
+    [ordered]@{ok=$result.ok;stopBeforePlayer=$result.state.pipeline.stopBeforePlayer;results=$result.state.pipeline.results;next=$result.state.pipeline.next;reportCount=$result.state.pipeline.records.Count} | ConvertTo-Json -Depth 6 | Write-Output
 } else { Write-Output ($result | ConvertTo-Json -Depth 8) }
 Write-Output ('Evidence: ' + $evidence.Substring($root.Length + 1))
 if ($process.ExitCode -ne 0 -or -not $result.ok) { throw 'Runtime smoke failed.' }

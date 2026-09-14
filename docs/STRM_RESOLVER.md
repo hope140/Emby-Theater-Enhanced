@@ -1,6 +1,6 @@
-# STRM Mount Resolver
+# STRM Playback Source Resolver
 
-本阶段实现一个最小的 STRM Mount Resolver。它运行在现有 `PlaybackManager → libmpv` 播放链内，只决定 Embedded libmpv 最终加载的 source，不创建播放器、Session 或 PlaySession。
+Resolver 运行在现有 `PlaybackManager → libmpv` 播放链内，只决定 Embedded libmpv 最终加载的 source，不创建播放器、Session 或 PlaySession。当前优先级为 CloudDrive2 same-origin HTTP → Mount → Native；DirectUrl 不在本阶段。
 
 ## Detection
 
@@ -25,11 +25,11 @@ Resolver 使用三个严格分离的路径字段。
 
 ## Resolver contract
 
-成功或 fallback 都返回一个同步结果。
+同步 `resolve()` 保留原 Mount 契约；产品播放使用异步 `resolveAsync()`，CD2 成功可返回 URL，否则继续原 Mount/Native 契约。
 
 ```javascript
 {
-    type: 'native' | 'local',
+    type: 'native' | 'local' | 'url',
     source: '...',
     reason: '...',
     isStrm: true | false,
@@ -38,7 +38,15 @@ Resolver 使用三个严格分离的路径字段。
 }
 ```
 
-本阶段不产生 `type: 'url'`。该类型为未来 CD2 Resolver 预留。
+`type: 'url'` 只表示已经由 main process 校验的 CD2 same-origin HTTP(S) source。CD2 resolver 不控制播放器，也不改变输入 context。
+
+## CloudDrive2 rules
+
+1. 复用 Mount Resolver 的确定性媒体候选，不扫描目录、不解析 provider opaque id。
+2. main process 读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX`；token 不进入 renderer、诊断或日志。
+3. V1 仅支持一条 local prefix → POSIX cloud prefix mapping；drive/UNC 大小写不敏感，absolute POSIX 大小写敏感，均严格检查路径边界并拒绝 `..`。absolute POSIX `MediaSource.Path` 带 allowlisted 媒体后缀时是确定性 CD2 candidate；在 Windows client 上它不会进入 `existsSync` Mount 检查，只能由 CD2 命中，否则继续 native fallback。
+4. 只调用 `FindFileByPath` 和 `GetDownloadUrlPath(preview=false, lazy_read=false, get_direct_url=false)`；只接受 regular file、完整 placeholder、HTTP(S) 与相同 scheme/host/port。
+5. foreign host/port、DirectUrl、externalUrl、未知 scheme、空/目录/异常响应和 RPC failure 全部视为 CD2 miss，再走 Mount → Native。
 
 ## Mount rules
 
@@ -60,13 +68,12 @@ URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、
 - 非 STRM、缺少 `item`/`mediaSource`/任一三个路径字段、未知播放方式和任何 Resolver 异常都保留 `nativeSource`。
 - `Transcode` 始终保留 `nativeSource`。
 - `DirectPlay` 和 `DirectStream` 只有在确定性本地文件命中时才替换 source。
-- Resolver 不执行网络请求、不等待远端、不自行 seek，也不改变 resume offset、音轨、字幕、`MediaSourceId` 或 `PlaySessionId`。
+- renderer Resolver 只通过窄 IPC 请求 main-process CD2 service，不自行 seek，也不改变 resume offset、音轨、字幕、`MediaSourceId` 或 `PlaySessionId`。
 - `libmpv.playInternal` 仅使用结果的 `source` 调用原有 `loadfile`；原始 `options` 继续用于字幕、音轨、上报和 Session 控制。
+- PlaybackManager request id 与 libmpv generation 使新 Play/NextTrack/Stop/destroy 立即淘汰旧请求；旧 RPC、旧 `core-playing` listener 和旧 error recovery 不得影响新播放。
 
-诊断只记录 `isStrm`、结果类型、reason、local exists 和 fallback，不记录完整媒体路径、URL、凭据、媒体名称或 Item 标识。当前 reason 包括 `mount_hit`、`mount_missing`、`not_strm`、`transcode_skip`、`invalid_context`、`parse_failed` 和 `native_fallback`。
+诊断只记录 `isStrm`、结果类型、reason、local exists 和 fallback，不记录完整媒体路径、URL、凭据、媒体名称或 Item 标识。当前 reason 包括 `mount_hit`、`mount_missing`、`mapping_miss`、`transport_error`、`not_strm`、`transcode_skip`、`invalid_context`、`parse_failed` 和 `native_fallback`。
 
 ## Known limitations
 
-当前已通过 Node 单元测试和隔离 frozen Electron 的 PlaybackManager/libmpv 夹具。夹具覆盖普通媒体、无 Mount 的 STRM fallback、Mount 文件命中以及 Session/control 状态保持。真实 Emby smoke 已完成 native fallback 和控制链回归，但当前服务器路径条件没有自然 Mount 命中，real Emby Mount hit pending；不同媒体编码、字幕/音轨差异和长时间稳定性仍需实机验收。CD2 不在本阶段范围内。
-
-未来解析优先级为 `CD2 → Mount → native`。CD2 应在不改变本契约和 PlaybackManager 生命周期的前提下作为更高优先级 source resolver 接入。
+当前 unit/fake/frozen Electron 已覆盖 CD2 hit、transport reject → Mount/Native、CD2 miss → Mount/Native、POSIX candidate 不进入 Windows Mount、Transcode、timeout、Abort、cancel、late callback、双 NextTrack、libmpv Stop、PlaybackManager Stop-before-player.play 和旧 `core-playing` listener；PlaybackManager fixture 中 Item/MediaSource/PlaySessionId、控制与报告保持。独立真实 CD2 MKV 已观察 `core-playing`、`core-idle=false`、track list、cache state 与 time-pos 推进。2026-09-14 两个真实 Emby POSIX STRM 样本在同一条 ignored source-side mapping 下均返回 `cd2_hit`，source kind 为 CD2 URL，embedded libmpv/core-playing、Session/WebSocket/controls/reports 全部通过。DirectUrl、refresh、retry、多 mapping 与设置 UI 留待后续。

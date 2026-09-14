@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package clouddrive;
+
+// Minimal wire-compatible subset of CloudDrive2 API schema 1.0.13.
+// Source: hope140/embyToLocalPlayer beta snapshot
+// 54b2abae0537f1b4c65752edaac059d3cda4790e, Apache-2.0.
+service CloudDriveFileSrv {
+  rpc FindFileByPath(FindFileByPathRequest) returns (CloudDriveFile) {}
+  rpc GetDownloadUrlPath(GetDownloadUrlPathRequest)
+      returns (DownloadUrlPathInfo) {}
+}
+
+message FindFileByPathRequest {
+  string parentPath = 1;
+  string path = 2;
+}
+
+message CloudDriveFile {
+  string fullPathName = 3;
+  int64 size = 4;
+
+  enum FileType {
+    Directory = 0;
+    File = 1;
+    Other = 2;
+  }
+
+  FileType fileType = 5;
+  bool isDirectory = 30;
+}
+
+message GetDownloadUrlPathRequest {
+  string path = 1;
+  bool preview = 2;
+  bool lazy_read = 3;
+  bool get_direct_url = 4;
+}
+
+message DownloadUrlPathInfo {
+  string downloadUrlPath = 1;
+  optional uint64 expiresIn = 2;
+  optional string directUrl = 3;
+  optional string userAgent = 4;
+  map<string, string> additionalHeaders = 5;
+}
