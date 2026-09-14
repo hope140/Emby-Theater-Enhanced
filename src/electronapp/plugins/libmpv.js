@@ -520,7 +520,6 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
                         embed.classList.add('mpv-videoPlayer');
                         embed.addEventListener('message', message);
                         embed.style.opacity = 0;
-                        dlg.insertBefore(embed, dlg.firstChild);
                         libmpv = embed;
 
                         addEventListener('ready', async () => {
@@ -528,6 +527,8 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
                             await observeProperty(['pause', 'time-pos', 'duration', 'volume', 'mute', 'eof-reached', 'demuxer-cache-state', 'demuxer-cache-time', 'estimated-vf-fps', 'sub-delay', 'speed', 'core-idle'])
                             resolve();
                         }, { once: true })
+
+                        dlg.insertBefore(embed, dlg.firstChild);
 
                     });
 
