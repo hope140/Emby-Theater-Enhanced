@@ -10,6 +10,10 @@ function loader(connectionManager) {
     return (_modules, onLoad) => onLoad(connectionManager);
 }
 
+function promiseLoader(connectionManager) {
+    return () => Promise.resolve(connectionManager);
+}
+
 function assertSafeResult(actual, expected) {
     assert.deepEqual(actual, expected);
     assert.deepEqual(Object.keys(actual).sort(), ['loggedIn', 'reason']);
@@ -19,6 +23,23 @@ test('profile inspect requires a client and a successful current user lookup', a
     assertSafeResult(await inspectAcceptanceProfile(loader({
         currentApiClient: () => ({getCurrentUser: () => Promise.resolve({Id: 'fixture-user'})})
     })), {loggedIn: true, reason: 'logged-in'});
+
+    assertSafeResult(await inspectAcceptanceProfile(promiseLoader({
+        currentApiClient: () => ({getCurrentUser: () => Promise.resolve({Id: 'fixture-user'})})
+    })), {loggedIn: true, reason: 'logged-in'});
+
+    assertSafeResult(await inspectAcceptanceProfile(null, {
+        connectionManager: {currentApiClient: () => ({getCurrentUser: () => Promise.resolve({Id: 'fixture-user'})})}
+    }), {loggedIn: true, reason: 'logged-in'});
+
+    let delayedConnectionManager;
+    const delayed = inspectAcceptanceProfile(null, {
+        pollTimeoutMs: 100,
+        pollIntervalMs: 1,
+        getConnectionManager: () => delayedConnectionManager
+    });
+    delayedConnectionManager = {currentApiClient: () => ({getCurrentUser: () => Promise.resolve({Id: 'fixture-user'})})};
+    assertSafeResult(await delayed, {loggedIn: true, reason: 'logged-in'});
 
     assertSafeResult(await inspectAcceptanceProfile(loader({
         currentApiClient: () => ({getCurrentUser: () => Promise.resolve(null)})

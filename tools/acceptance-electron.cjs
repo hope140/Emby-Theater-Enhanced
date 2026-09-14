@@ -53,7 +53,7 @@ const end=createTerminalWriter({report,save,exit:code=>app.exit(code),beforeWrit
     report.readiness=recorder.build(report);
 }});
 async function inspectProfile(){
-    const result=await evaluate('('+profileInspectSource+')(require)');
+    const result=await evaluate('('+profileInspectSource+')(typeof require === "function" ? require : (window && typeof window.require === "function" ? window.require : null), {connectionManager: window && window.ConnectionManager, getConnectionManager: function(){return window && window.ConnectionManager;}})');
     const reason=result&&typeof result.reason==='string'?result.reason:'inspection-error';
     await end(null,{profile:{loggedIn:!!(result&&result.loggedIn),reason},classification:reason});
 }
@@ -83,7 +83,7 @@ app.on('browser-window-created',(_,created)=>{
         if(busy)return;busy=true;
         (async()=>{
             try{
-                mark('did-finish-load');
+                mark('app-load');
                 mark('renderer-ready');
                 // Playback readiness is observed from the app's own signals and
                 // staged after manager.play(); the previous fixed pre-flow sleep

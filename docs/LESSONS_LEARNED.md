@@ -51,3 +51,9 @@
 49. current-main acceptance 只有在 runtime provenance 通过后才具有产品 flow 解释力；`resolver-result` 与 `manager-play-resolved` 均通过且 loadfile unavailable 时，可将主链记为成功，同时保留 loadfile observability gap，不把它升级为产品 regression。
 50. acceptance report 的 `completed=true` 与 terminal classification 才能触发 runner 收尾；成功和明确失败都应 `timedOut=false`、`runnerResult=completed`，只有缺少终态报告才进入 deadline timeout。taskkill 后的 child exit code 不能覆盖已确认的 terminal success，owned process residual 才是清理结果的关键证据。
 51. runtime provenance 不能只校验少量 sentinel；构建验收应覆盖全部 repo-owned `src/electronapp` 文件和启动 wrapper，并把构建时改写的 package metadata、PlaybackManager overlay 与 vendor/node_modules/Electron/native payload 分开建模。终态收尾还必须在 exact root PID kill 前重新核对 CreationDate；PID 缺失按已退出处理，CreationDate 不同只记录 ownership mismatch，绝不按进程名扩大清理范围。
+52. `embed-created` 若来自 acceptance DOM observer，只能命名为 creation observation，不能冒充产品 `createElement()` 调用；要拆分 PlaybackManager 前置等待，必须单独定义边界信号。
+53. 当前 Pepper `ready` message 先由产品 embed listener 处理，再同步触发 window `ready` 和 authoritative diagnostics；acceptance listener 后注册时可能出现毫秒级负差值，这属于 listener 顺序与 Date.now 取整，不是真实负耗时。
+54. 三次同 commit/runtime 的 readiness 样本如果 `embed→authoritative ready` 稳定而 `play→embed` 波动，应先定位 embed 前置链，不能把长尾直接归因于 PPAPI、DLL 或 resolver。
+55. terminal acceptance report 已持久化后 root 自然退出属于可验证收尾路径；runner 可只检查已建立 ownership 的 known descendants，并保持 creation-date 边界，不能把正常 root exit 误报成 harness failure。
+56. 当前 Alameda acceptance loader 可能返回 Promise，且 `ConnectionManager.currentApiClient` 可能在 global 初始化后才出现；profile inspect 必须兼容 callback/Promise 和有界等待，失败只能输出安全枚举。
+57. Pepper bridge 的行为回归必须模拟 attach 同步窗口内的 immediate ready；仅检查 `addEventListener` 与 `insertBefore` 的文本顺序不足以证明 callback 实际捕获事件。listener ordering 修复应保持 `{once:true}` 和现有 destroy/reuse 生命周期，并用一次有界真实 acceptance 做非性能性质的回归。

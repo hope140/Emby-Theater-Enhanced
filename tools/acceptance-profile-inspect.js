@@ -23,6 +23,33 @@ async function inspectAcceptanceProfile(loadRequire, options) {
         });
     }
 
+    function moduleValue(value) {
+        if (Array.isArray(value)) value = value[0];
+        return value && value.default ? value.default : value;
+    }
+
+    function loadModule(loadRequire, name) {
+        return new Promise(function (resolve, reject) {
+            var settled = false;
+            function finish(value) {
+                if (settled) return;
+                settled = true;
+                resolve(moduleValue(value));
+            }
+            function fail(error) {
+                if (settled) return;
+                settled = true;
+                reject(error);
+            }
+            try {
+                var request = loadRequire([name], finish, fail);
+                if (request && typeof request.then === 'function') request.then(finish, fail);
+            } catch (error) {
+                fail(error);
+            }
+        });
+    }
+
     function inspectApi(api) {
         var request;
 
@@ -62,24 +89,39 @@ async function inspectAcceptanceProfile(loadRequire, options) {
         });
     }
 
-    if (typeof loadRequire !== 'function') {
+    if (typeof loadRequire !== 'function' && !settings.connectionManager && typeof settings.getConnectionManager !== 'function') {
         return inspectionError();
     }
 
-    var connectionManager;
-    try {
-        connectionManager = await new Promise(function (resolve, reject) {
-            loadRequire(['connectionManager'], resolve, reject);
-        });
-    } catch (err) {
-        return inspectionError();
+    var connectionManager = settings.connectionManager;
+    if (!connectionManager && typeof settings.getConnectionManager !== 'function') {
+        try {
+            connectionManager = await loadModule(loadRequire, 'connectionManager');
+        } catch (err) {
+            return inspectionError();
+        }
     }
 
-    if (!connectionManager || typeof connectionManager.currentApiClient !== 'function') {
+    if (!connectionManager && typeof settings.getConnectionManager !== 'function') {
         return inspectionError();
     }
 
     while (Date.now() - started < pollTimeoutMs) {
+        if (!connectionManager && typeof settings.getConnectionManager === 'function') {
+            try {
+                connectionManager = settings.getConnectionManager();
+            } catch (error) {
+                return inspectionError();
+            }
+        }
+        if (!connectionManager) {
+            await wait(pollIntervalMs);
+            continue;
+        }
+        if (typeof connectionManager.currentApiClient !== 'function') {
+            await wait(pollIntervalMs);
+            continue;
+        }
         var api;
         try {
             api = connectionManager.currentApiClient();

@@ -28,3 +28,7 @@ DirectPlay 和 DirectStream 允许在确定性 Mount 命中时替换 source；Tr
 播放器注册及优先级由 PlaybackManager 的 registerPlayer / priority 排序处理；libmpv priority=-2，普通 HTML 视频播放器仍是基线中保留的后备模块。第一轮禁用外置插件注册后，隔离启动实际注册 libmpv、图片、YouTube、HTML audio/video 和远控插件，没有 externalplayer。普通视频是否最终均选中 libmpv，库内仍无真实样本；现有普通媒体证据仅为本地/模拟验证。
 
 独立测试脚本可调用 libmpv 插件播放合成视频来检测桥接；这只是测试入口，产品播放逻辑没有绕过 PlaybackManager。此类测试不代表 Emby Session 正常。
+
+## 2026-09-14 readiness timing 复核
+
+同一 `main@e9e2ad2` 和 verification runtime 的三次真实样本均观察到唯一 embed，且 `play-called→embed` 为 4535–5996ms，`embed→authoritative enhancedDiagnostics(libmpv, 'ready')` 为 2–3ms。因而 readiness 抖动应先按 embed 前置链分析；本文件不能把该段继续拆成 `createMediaElement()`、OSD、display-sync 或 PlaybackManager API 各自耗时，因为当前产品没有这些调用级 acceptance signal。当前结论和完整 evidence 见 `docs/PEPPER_READINESS_DIAGNOSIS.md`。

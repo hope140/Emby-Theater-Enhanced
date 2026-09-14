@@ -53,3 +53,23 @@
 按当前源码重建独立 verification runtime 后，frozen DirectUrl fixture 进入 resolver 并观察到 DirectUrl 请求、required UA 与 no-leak；整体 fixture 在切换第二个 source 时发生 UI readiness timeout，因此不新增完整 controls/generation 通过结论。exact Pepper file-local UA 探针与 Stop-before-player 仍通过。
 
 使用已有 persistent profile 和 ignored mapping 做一次有界真实 DirectSmoke，inspect/select 通过，但 resolver 阶段返回 timeout，未创建 bridge、未发起媒体请求；此结果记录为 acceptance/runtime 前置阻塞，不作为 DirectUrl 或 fallback 失败。前一条已保存的真实 DirectUrl 分层成功证据仍是本轮 product path 的 PASS 依据，完整 PlaybackManager/Session/WebSocket/controls/reports 继续保持未通过。
+
+## 2026-09-14 — Pepper readiness 抖动诊断
+
+本轮不是功能验收，使用当前 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c` 新建 verification runtime，连续执行 Run A/B/C，每次只执行 `inspect,select,play,stop`。三次均 acceptance success、runner completed、timedOut=false、cleanup verified-clean、residual=0；每次 unique embed=1，播放期间无 recreation/duplicate，Stop 后正常 disconnected。
+
+脱敏 timing 如下：
+
+| Run | play→embed | embed→bootstrap | bootstrap→authoritative ready | embed→authoritative ready | authoritative ready→manager resolved |
+|---|---:|---:|---:|---:|---:|
+| A | 5996ms | 3ms | ≈0ms（raw -1） | 2ms | 2657ms |
+| B | 4565ms | 4ms | ≈0ms（raw -1） | 3ms | 2117ms |
+| C | 4535ms | 4ms | ≈0ms（raw -1） | 3ms | 2268ms |
+
+三次的 resolver-result 均在 ready 后 4–5ms 出现；没有证据将 PR4/DirectUrl/resolver 与 Pepper ready 延迟关联。`loadfileObservation=unavailable` 仍是 acceptance-only outgoing command 观测缺口。结论为 `ROOT CAUSE NOT YET CONFIRMED`，主要抖动位于 embed 前置的 PlaybackManager/player 链，精确子阶段尚未观测；产品代码没有修改。
+
+## 2026-09-14 — Pepper ready listener race follow-up
+
+分支 `fix/pepper-ready-listener-race` 的产品修复 commit 为 `731dc2ad5ca4898475a5e641b6975563f9cf8c74`。按该 commit 构建新 runtime 后只执行一次 `inspect,select,play,stop`，结果为 inspect PASS、select PASS、isStrm=true、unique embed=1、Pepper ready、resolver-result、manager-play-resolved 和 classification success；runner completed、cleanup verified-clean、residual=0。
+
+本次 timing 为 `play→embed=4724ms`、`embed→Pepper ready=22ms`。它只证明 listener 顺序修复没有破坏当前播放链，不证明性能改善，也不改变历史 `ROOT CAUSE NOT YET CONFIRMED` 结论。`loadfileObservation=unavailable` 继续作为 observability gap。
