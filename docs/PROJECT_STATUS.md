@@ -1,6 +1,6 @@
 # 项目状态
 
-更新时间 2026-09-14（UTC+8）。**PR #2 merge-blocker 修正已完成：terminal PlaybackManager Stop 可淘汰尚未进入 player 的旧请求；transport reject 继续 Mount/Native；空 cloudPrefix 拒绝、显式 `/` 合法。独立真实 CD2 `mkv-medium` 已观察到 path 接受、MKV/track list、`core-playing`、`core-idle=false`、cache state 与 time-pos 推进。persistent acceptance profile inspect 已修正为 API client + 成功 `getCurrentUser()` 才报告 `loggedIn=true`，失败只返回安全枚举。真实 Emby 两个 POSIX STRM 样本的 Session/WebSocket/控制/报告通过，但 `MediaSource.Path` 未命中当前 source-side mapping，resolver 返回 `mapping_miss` 后走 native fallback；真实 Emby CD2 source hit 仍是剩余 blocker。**
+更新时间 2026-09-14（UTC+8）。**PR #2 merge-blocker 修正与真实 Emby CD2 验收均完成：terminal PlaybackManager Stop 可淘汰尚未进入 player 的旧请求；transport reject 继续 Mount/Native；空 cloudPrefix 拒绝、显式 `/` 合法。独立真实 CD2 `mkv-medium` 已观察到 path 接受、MKV/track list、`core-playing`、`core-idle=false`、cache state 与 time-pos 推进。persistent acceptance profile inspect 已修正为 API client + 成功 `getCurrentUser()` 才报告 `loggedIn=true`，失败只返回安全枚举。两个真实 POSIX STRM 样本使用同一条本地 ignored source-side mapping 均达到 `cd2_hit`，并完成 embedded libmpv、Session/WebSocket、controls 与 reports 验收。**
 
 ## 接手摘要
 
@@ -26,7 +26,7 @@
 | Session / Remote Control | 非管理员账号下，真实服务器接受命令、WebSocket 送达、播放器响应及服务端状态回读全部通过 |
 | WatchTogether | 按用户确认的后台控制正常口径通过；未宣称插件双客户端同步精度已测试 |
 | STRM Mount Resolver | 已实现 Detection、Mount → Native contract、确定性优先级、媒体扩展 allowlist、Transcode protection 和安全诊断；POSIX source candidate 只进入 CD2，不进入 Windows Mount；43/43 与隔离 runtime 通过；真实 native fallback 通过 |
-| CloudDrive2 Resolver PR #2 | merge blocker 已修正；43/43、fake/frozen、Stop-before-player、reject fallback、POSIX mapping、真实 CD2 media core-playing 通过；真实 Emby inspect 与 Session/controls/reports 通过，但当前 source-side mapping 未命中，CD2 source hit pending |
+| CloudDrive2 Resolver PR #2 | merge blocker 已修正；43/43、fake/frozen、Stop-before-player、reject fallback、POSIX mapping、真实 CD2 media core-playing 通过；两个真实 Emby POSIX STRM 样本均 `cd2_hit`，完整控制链与报告通过 |
 | External Player | 已禁用入口并测试；保留旧实现 |
 | 环境诊断 | 实际 Electron/Chrome/Node、DLL API/version、ready/playing 已取得 |
 | mpv.conf / GPU / HDR | 配置规则/隔离通过；真实样本 gpu-next、d3d11va 硬解及缓存 3221225472 字节已取得；HDR/画质效果不是本次样本覆盖范围 |
@@ -44,15 +44,15 @@ Electron **18.3.15**；Chromium **100.0.4896.160**；Node **16.13.2**；mpv **v0
 5. 实际安装使用用户授权的独立 E 盘目录且当前进程已提权；安装/覆盖/启动/卸载均通过，但未展示 UAC 交互，也没有单独验证 Program Files ACL。尚未正式发布。
 6. Mount Resolver 已完成静态、单元和隔离 runtime 验证；绝对 POSIX source candidate 在 Windows 上不会进入 `existsSync` Mount；真实 Emby native fallback 与控制链通过，但当前样本没有自然 Mount 命中；不同编码、字幕/音轨差异和长时间稳定性尚未验证。
 7. CloudDrive2 PR #2 已完成 main-process 纯 JS gRPC、单条 Windows/UNC/POSIX mapping、750ms 总预算及 generation/late-response 防护。真实临时 mapping 命中，same-origin HEAD 200 / Range 206；有限候选中的普通 MKV 已实际 `core-playing` 并推进。Pepper bridge 不直接暴露 start-file/file-loaded/end-file/log-message；path 可直接观察，file-loaded 由 MKV format 与 13-track list 推断，未观察到 EOF/error。
-8. 当前配置仅通过环境变量或 ignored local config 注入，不含设置 UI/credential storage。DirectUrl、User-Agent/additionalHeaders、expiresIn recovery、refresh/retry、多 mapping、provider 特判和 CD2 cache 管理均不在 PR #2。
+8. 当前配置仅通过环境变量或 ignored local config 注入，不含设置 UI/credential storage。真实验收使用的 mapping 只存在于 ignored local acceptance 配置，未进入源码、文档或 Git。DirectUrl、User-Agent/additionalHeaders、expiresIn recovery、refresh/retry、多 mapping、provider 特判和 CD2 cache 管理均不在 PR #2。
 
 ## 当前阻塞项与下一步
 
-用户已登录非管理员账号，明确允许选择任意影视测试，并确认全库为 STRM、WatchTogether 以后台控制正常为准。2026-09-14 persistent profile inspect 返回 `logged-in`。两个不同 POSIX STRM 样本的真实 DirectStream 播放、进度、Pause/Seek/Resume/NextTrack/Stop 全部通过；Session/WebSocket 回读正常，10 条播放报告全部被服务器接受。两个样本的 `Item.Path` 命中现有 sidecar 前缀，但 `MediaSource.Path` 均未命中当前 source-side mapping，resolver 记录 `cd2=mapping_miss` 并回 native URL。测试会留下样本正常观看进度，未额外重置用户数据。
+用户已登录非管理员账号，明确允许选择任意影视测试，并确认全库为 STRM、WatchTogether 以后台控制正常为准。2026-09-14 persistent profile inspect 返回 `logged-in`。两个不同 POSIX STRM 样本在同一条本地 ignored source-side mapping 下均由 resolver 返回 `cd2_hit`、source kind 为 `cd2-url`；真实 embedded libmpv 播放推进，Play/Pause/Seek/Resume/NextTrack/Stop 全部通过，Session/WebSocket 回读正常，10 条播放报告全部被服务器接受，停止后 NowPlayingItem 清空。测试会留下样本正常观看进度，未额外重置用户数据。
 
-本轮复核 `mount-resolver.js` 的 POSIX 分支并补充回归：absolute POSIX candidate 仍交给 CD2，CD2 miss 后不调用 Windows `existsSync`；UNC source 仍可命中 Mount。persistent inspect 工具现在只返回 `{loggedIn,reason}` 安全枚举；真实验收工具使用同一 profile 完成 inspect、选择、播放和控制回读，但 source-side mapping blocker 尚未关闭。没有修改服务器配置、媒体库、权限、账号或网盘数据。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
+本轮复核 `mount-resolver.js` 的 POSIX 分支并补充回归：absolute POSIX candidate 仍交给 CD2，CD2 miss 后不调用 Windows `existsSync`；UNC source 仍可命中 Mount。persistent inspect 工具只返回 `{loggedIn,reason}` 安全枚举；通过两个样本的只读 mapLocalPath/CD2 验证后，仅在 ignored acceptance 配置中注入 mapping，完成真实 CD2 控制链。没有修改服务器配置、媒体库、权限、账号、CD2 mount/cache 或网盘数据。许可证、公开范围与模型策略见 `docs/LICENSING.md` 和 `docs/AI_MODEL_POLICY.md`。
 
-PR #2 新增 `cd2-resolver.js` 与 main-process `cd2-service.js`/`cd2-ipc.js`，通过 build-time overlay 给未公开 PlaybackManager 增加 request id，libmpv 使用 monotonic generation、AbortController 和 gRPC cancel。43/43 Node tests 通过；独立 frozen Stop-before-player 断言旧请求未调用 `player.play`、未产生 Playing report。完整 frozen Electron 中 dependency require、fake gRPC、CD2 hit、Mount/Native fallback、Play/Pause/Seek/Resume/NextTrack/Stop、报告、双 NextTrack、active cancel 与 0 active leak 通过。真实 CD2 media 通过；真实 Emby inspect、Session/WebSocket/controls/reports 通过，但当前两个 `MediaSource.Path` 均 `mapping_miss`，没有把 native fallback 误记为真实 CD2 source hit。未修改 CD2 配置、mount、cache、账号或网盘数据。
+PR #2 新增 `cd2-resolver.js` 与 main-process `cd2-service.js`/`cd2-ipc.js`，通过 build-time overlay 给未公开 PlaybackManager 增加 request id，libmpv 使用 monotonic generation、AbortController 和 gRPC cancel。43/43 Node tests 通过；独立 frozen Stop-before-player 断言旧请求未调用 `player.play`、未产生 Playing report。完整 frozen Electron 中 dependency require、fake gRPC、CD2 hit、Mount/Native fallback、Play/Pause/Seek/Resume/NextTrack/Stop、报告、双 NextTrack、active cancel 与 0 active leak 通过。真实 CD2 media 通过；两个真实 Emby POSIX STRM 样本均 `cd2_hit`，embedded libmpv/core-playing、Session/WebSocket/controls/reports 全部通过。未修改 CD2 配置、mount、cache、账号或网盘数据。
 
 ## 推荐继续入口
 

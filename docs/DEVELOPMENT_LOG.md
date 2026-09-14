@@ -1,5 +1,18 @@
 # 开发日志
 
+## 2026-09-14 — single-prefix mapping 与真实 Emby CD2 验收完成
+
+继续 `feat/cd2-resolver`，没有改产品 resolver、PlaybackManager、Session/WebSocket 或 libmpv。使用同一个 persistent acceptance profile，先对两个有限 STRM 样本做脱敏只读诊断：两个 `Item.Path`/`MediaSource.Path` 关系可由同一条 source-side POSIX prefix → cloud prefix 表示，relative suffix 保持；`mapLocalPath` 的边界、`..` 拒绝和 POSIX case sensitivity 通过。两个候选 CD2 target 均为 regular file，`FindFileByPath` 与 `GetDownloadUrlPath(get_direct_url=false)` 成功，HEAD 200、Range 206、无重定向。实际 mapping 只写入 ignored local acceptance 配置，未进入源码、文档、fixture、acceptance report 或 Git。
+
+使用该 ignored mapping 重跑真实 Emby acceptance。两个样本 resolver 均返回 `type=url`、`reason=cd2_hit`、`source kind=cd2-url`；embedded libmpv/core-playing 与 playback advancing 通过。真实 inspect 为 `logged-in`、非管理员、Session 可见、WebSocket 在线、远控有效；Play、Pause、Seek、Resume、NextTrack、Stop 全部通过，两个 Item/MediaSource/PlaySession identity 由实际开始/停止报告保持，10 条报告全部接受，Stop 后 NowPlayingItem 清空。一次首请求 cold timeout 在重复运行中未复现，最终验收以两个样本均 `cd2_hit` 的重复结果为准。
+
+没有修改服务器、CD2 配置、mount、cache、账号、媒体库或网盘数据；没有新增 multi-mapping、retry、refresh、DirectUrl、headers、音轨或设置 UI。未发现新的跨层生命周期、Session identity 或 PlaybackManager/libmpv correctness 问题，没有升级到 Sol High。
+
+Model Tier: 1
+Model: current Codex session
+Reason: explicit single-prefix mapping contract and bounded real acceptance rerun
+Escalated: no
+
 ## 2026-09-14 — persistent profile inspect 修正与 PR #2 真实验收复核
 
 保持 `feat/cd2-resolver`，先复核 worker 未提交 diff，再补充 persistent profile inspect 的 targeted test 和 POSIX Mount 边界回归。`inspectAcceptanceProfile` 现在必须同时取得 API client 并成功解析 `getCurrentUser()` 用户对象才报告 `loggedIn=true`；拒绝、超时、空用户、缺少 API、loader/client 异常统一收敛为安全枚举，结果字段仅有 `loggedIn` 与 `reason`。`accept-live.ps1` 使用 LocalApplicationData 下的固定 acceptance profile，profile 不存在、inspect 失败和手动登录入口均不回显 profile 路径或认证材料。

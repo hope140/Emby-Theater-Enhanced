@@ -38,6 +38,6 @@
 
 使用同一个 `%LOCALAPPDATA%\EmbyTheaterEnhanced-Acceptance` profile 进行 inspect。实现现在只有在 API client 存在且 `getCurrentUser()` 成功返回用户对象时才报告 `loggedIn=true`；超时、拒绝、空用户、缺少 API 或异常只返回安全枚举，不输出 server URL、username、token、cookie、localStorage 或 raw exception。实际 inspect 结果为 `exists=true, loggedIn=true, reason=logged-in`。
 
-在当前工作区生成的隔离 runtime 上执行真实验收，选择两个 POSIX STRM 样本。真实 Session 可见、账号为非管理员、WebSocket 在线、远控能力有效；Play、Pause、Seek、Resume、NextTrack、Stop 全部通过，10 条播放报告全部被服务器接受。两个样本的 `Item.Path` 命中现有 sidecar 前缀，但 `MediaSource.Path` 未命中当前 source-side mapping，resolver 安全记录 `cd2=mapping_miss`、`mount_missing` 并回 native URL，因此本轮控制链通过但真实 Emby CD2 source replacement 仍未通过。
+在当前工作区生成的隔离 runtime 上执行真实验收，选择两个 POSIX STRM 样本。只读 mapping 诊断确认两个样本共享一条稳定 single-prefix mapping，relative suffix 保持，边界/`..`/POSIX case sensitivity 通过，两个 CD2 target 均为 regular file，HEAD 200、Range 206 且无重定向。真实 Session 可见、账号为非管理员、WebSocket 在线、远控能力有效；两个样本均 `cd2_hit`，source kind 为 CD2 URL，embedded libmpv/core-playing 与 playback advancing、Play、Pause、Seek、Resume、NextTrack、Stop 全部通过，10 条播放报告全部被服务器接受。
 
-这项 blocker 需要补充或确认能覆盖实际 `MediaSource.Path` 的 POSIX→CD2 source mapping。验收不使用 `Item.Path` 替代 `MediaSource.Path`，也没有自动学习、扫描或修改服务器/CD2 配置；原始证据只保存在本地 ignored work directory。
+实际 mapping 只存在于 ignored local acceptance 配置，没有写入源码、文档、fixture、acceptance report 或 Git。验收不使用 `Item.Path` 替代 `MediaSource.Path`，也没有自动学习、扫描或修改服务器/CD2 配置；原始证据只保存在本地 ignored work directory。
