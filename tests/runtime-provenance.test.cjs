@@ -88,4 +88,3 @@ test('runtime provenance excludes the exact legacy subtree without weakening nor
         fs.rmSync(root, {recursive: true, force: true});
     }
 });
-

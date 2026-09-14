@@ -27,7 +27,7 @@
 Local audit workspace：本机物理删除了 41 个 ignored snapshot files。
 Durable repository/product behavior：`runtime-provenance.cjs` 的精确 source exclusion 与 `tools/build.ps1` 的 runtime exclusion 共同保证 External Player frontend 不会进入 fresh Enhanced runtime，不依赖开发机是否手工删除 snapshot。
 
-本轮后续 portability 修复还会把该 exclusion 写入 provenance manifest，并用 source sentinel 验证存在/不存在两种机器状态的 scope 一致性。
+本轮 portability 修复已把该 exclusion 写入 provenance manifest，并用 source sentinel 验证存在/不存在两种机器状态的 scope 一致性。
 
 ## 仍然保留的共享能力
 
