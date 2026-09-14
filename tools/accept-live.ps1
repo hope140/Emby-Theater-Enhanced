@@ -6,7 +6,7 @@ param(
     [switch]$VisualOnly,
     [switch]$InspectProfile,
     [switch]$LaunchManualLogin,
-    [string]$RuntimeName = 'EmbyTheaterEnhanced-0.1.1-final-win-x64'
+    [string]$RuntimeName = 'EmbyTheaterEnhanced-0.1.1-readiness-main-20260914'
 )
 $ErrorActionPreference = 'Stop'
 $root=Split-Path -Parent $PSScriptRoot
@@ -24,6 +24,8 @@ if(-not $InspectProfile -and -not $LaunchManualLogin -and -not $AuthorizedLivePl
 if($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$'){throw 'Invalid runtime name.'}
 $runtime=Join-Path (Join-Path $root 'dist') $RuntimeName
 if(-not (Test-Path -LiteralPath (Join-Path $runtime 'x64/electron/electron.exe'))){throw 'Requested runtime does not exist.'}
+$runtimeLibmpv=Join-Path $runtime 'electronapp/plugins/libmpv.js'
+if(-not (Test-Path -LiteralPath (Join-Path $runtime 'electronapp/resolvers') -PathType Container) -or -not (Test-Path -LiteralPath $runtimeLibmpv -PathType Leaf) -or -not ([IO.File]::ReadAllText($runtimeLibmpv).Contains('strmResolver.resolveAsync'))){throw 'runtime-validation-failed'}
 $profilePath=Assert-OutsideRepository (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'EmbyTheaterEnhanced-Acceptance')
 if(-not $LaunchManualLogin -and @((Get-Process -Name 'Emby.Theater' -ErrorAction SilentlyContinue)).Count){throw 'Close the idle Enhanced host before acceptance; do not interrupt existing playback.'}
 $profileExists=Test-Path -LiteralPath $profilePath -PathType Container
@@ -33,6 +35,7 @@ if($InspectProfile -and -not $profileExists){
 }
 $output=Join-Path $root ('.work/live-acceptance-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $output -Force | Out-Null
+$epoch=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $info=New-Object Diagnostics.ProcessStartInfo
 $info.FileName=Join-Path $runtime 'x64/electron/electron.exe'
 $info.Arguments='"'+(Join-Path $PSScriptRoot 'acceptance-electron.cjs')+'" "'+$profilePath+'" "'+(Join-Path $runtime 'cec/cec-client.x64.exe')+'"'
@@ -43,6 +46,7 @@ $info.RedirectStandardOutput=(-not $LaunchManualLogin)
 $info.RedirectStandardError=(-not $LaunchManualLogin)
 $info.EnvironmentVariables['ETE_ACCEPT_RUNTIME']=$runtime
 $info.EnvironmentVariables['ETE_ACCEPT_OUTPUT']=$output
+$info.EnvironmentVariables['ETE_ACCEPT_EPOCH']=[string]$epoch
 if($InspectOnly){$info.EnvironmentVariables['ETE_ACCEPT_INSPECT_ONLY']='1'}
 if($SelectOnly){$info.EnvironmentVariables['ETE_ACCEPT_SELECT_ONLY']='1'}
 if($DirectSmokeOnly){$info.EnvironmentVariables['ETE_ACCEPT_DIRECT_SMOKE']='1'}
@@ -82,5 +86,13 @@ if($InspectProfile){
 }
 $summary=[ordered]@{completed=$result.completed;error=$result.error;stage=$result.currentStage;steps=@($result.stages|ForEach-Object{[ordered]@{method=$_.method;ok=$_.result.ok}})}
 if($null -ne $result.resolver){$summary.resolver=@($result.resolver)}
+if($null -ne $result.readiness){
+    $summary.readiness=[ordered]@{
+        failureClassification=$result.readiness.failureClassification
+        failureStage=$result.readiness.failureStage
+        playChain=$result.readiness.playChain
+        timeline=@($result.readiness.stages|ForEach-Object{[ordered]@{stage=$_.stage;elapsedMs=$_.elapsedMs;status=$_.status}})
+    }
+}
 $summary|ConvertTo-Json -Depth 6
 if($process.ExitCode -ne 0 -or -not $result.completed -or $result.error){throw 'Live acceptance did not complete successfully.'}

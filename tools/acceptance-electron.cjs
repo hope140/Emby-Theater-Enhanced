@@ -4,6 +4,7 @@
 const {app} = require('electron');
 const fs = require('fs');
 const path = require('path');
+const readiness = require('./acceptance-readiness.cjs');
 const runtime=process.env.ETE_ACCEPT_RUNTIME;
 const output=process.env.ETE_ACCEPT_OUTPUT;
 if(!runtime || !output) throw Error('Live acceptance parameters required');
@@ -14,13 +15,22 @@ const expectedCd2LocalPrefix=process.env.ETE_ACCEPT_CD2_LOCAL_PREFIX || process.
 const metadata=JSON.parse(fs.readFileSync(path.join(runtime,'electronapp/package.json'),'utf8'));
 app.setName(metadata.productName || metadata.name);
 app.getVersion=()=>metadata.version;
+fs.mkdirSync(output,{recursive:true});
 let win;
 let busy=false;
-const report={startedAt:new Date().toISOString(),version:metadata.version,stages:[],completed:false};
+const epoch=Number(process.env.ETE_ACCEPT_EPOCH||Date.now());
+const recorder=readiness.createRecorder();
+const report={startedAt:new Date().toISOString(),version:metadata.version,runtime:{name:process.env.ETE_ACCEPT_RUNTIME_NAME||path.basename(runtime),sourceCommit:process.env.ETE_ACCEPT_SOURCE_COMMIT||'',validation:process.env.ETE_ACCEPT_RUNTIME_VALIDATED==='1'?'passed':'unvalidated'},readinessEpoch:epoch,stages:[],completed:false};
 const resolverMessages=[];
+let failure=null;
+function trace(stage){try{fs.writeFileSync(path.join(output,'acceptance-trace.txt'),stage+'\r\n',{flag:'a'});}catch(_){}}
+function guard(stage,action){try{return action();}catch(error){trace('error@'+stage+' '+String(error&&error.message||error));throw error;}}
+function mark(stage){recorder.mark(stage,Date.now()-epoch);}
 function recordResolverMessage(message){
     const match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)(?: sourceKind=([A-Za-z0-9_-]+) direct=([A-Za-z0-9_-]+))?/.exec(String(message||''));
-    if(match)resolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6],sourceKind:match[7]||'unknown',direct:match[8]||'not_attempted'});
+    if(!match)return;
+    mark('resolver-result');
+    resolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6],sourceKind:match[7]||'unknown',direct:match[8]||'not_attempted'});
 }
 function safeResolverRows(rows){
     if(!Array.isArray(rows))return [];
@@ -28,10 +38,23 @@ function safeResolverRows(rows){
 }
 function save(){fs.writeFileSync(path.join(output,'acceptance.json'),JSON.stringify(report,null,2));}
 async function evaluate(code){return win.webContents.executeJavaScript(code);}
+function safeText(value,limit){
+    const text=String(value||'').replace(/[A-Za-z]:\\[^\s'"]*/g,'<path>').replace(/\s+/g,' ').trim();
+    return text.length>limit?text.slice(0,limit):text;
+}
 async function end(error){
     if(report.completed)return;
+    try{
+        const state=await evaluate('window.__eteReadiness ? window.__eteReadiness.snapshot() : null');
+        report.readinessState=recorder.sanitizeState(state);
+    }catch(_){ }
     if(win) await evaluate('window.eteAcceptance ? window.eteAcceptance.cleanup() : Promise.resolve()').catch(()=>{});
-    report.error=error || null;report.completed=true;save();app.exit(error?1:0);
+    mark('acceptance-end');
+    recorder.setResolverRows(safeResolverRows(resolverMessages));
+    report.readiness=recorder.build(report);
+    report.error=error || null;
+    report.acceptanceResult=error ? (failure && failure.failureClassification || error) : 'success';
+    report.completed=true;save();app.exit(error?1:0);
 }
 async function inspectProfile(){
     const result=await evaluate('('+profileInspectSource+')(require)');
@@ -43,45 +66,75 @@ async function inspectProfile(){
 }
 if(!manualLogin)setTimeout(()=>{
     if(profileInspect){report.loggedIn=false;report.reason='inspection-error';}
+    mark('acceptance-budget-exceeded');
     end('acceptance-timeout');
 },profileInspect?30000:240000);
 app.on('browser-window-created',(_,created)=>{
+    trace('browser-window-created');
     win=created;
+    mark('window-created');
+    // Publish the acceptance epoch in the renderer before any application code
+    // runs; the product preload stays untouched.
+    created.webContents.on('did-start-loading',()=>{
+        created.webContents.executeJavaScript('window.__eteEpoch='+JSON.stringify(epoch)+';void 0;').catch(()=>{});
+    });
     created.webContents.on('console-message',(_,level,message)=>recordResolverMessage(message));
     if(manualLogin)return;
-    created.webContents.once('did-finish-load',()=>{
+    created.webContents.on('did-finish-load',()=>{
+        // The initial about:blank load must not start the flow; only the
+        // application document does.
+        let url='';
+        try{url=String(created.webContents.getURL()||'');}catch(_){}
+        trace('did-finish-load url='+(/index\.html/i.test(url)?'app-document':'other'));
+        if(!/index\.html/i.test(url))return;
         if(busy)return;busy=true;
         (async()=>{
             try{
-                await new Promise(r=>setTimeout(r,7000));
+                mark('did-finish-load');
+                mark('renderer-ready');
+                // Playback readiness is observed from the app's own signals and
+                // staged after manager.play(); the previous fixed pre-flow sleep
+                // is replaced by an explicit app readiness condition.
+                trace('observer-inject-start');
+                await evaluate(fs.readFileSync(path.join(__dirname,'../tests/acceptance-readiness.js'),'utf8')+'\nvoid 0;');
+                trace('observer-injected');
                 if(profileInspect){await inspectProfile();return;}
                 await evaluate('window.__eteExpectedCd2Origin='+JSON.stringify(process.env.ETE_ACCEPT_CD2_ORIGIN || '')+';window.__eteExpectedCd2LocalPrefix='+JSON.stringify(expectedCd2LocalPrefix)+';void 0;');
-                await evaluate(`(function(){
-                    window.__eteResolverMessages=[];
-                    var original=console.log;
-                    console.log=function(){
-                        try{
-                            var text=Array.prototype.join.call(arguments,' ');
-                            var match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)(?: sourceKind=([A-Za-z0-9_-]+) direct=([A-Za-z0-9_-]+))?/.exec(text);
-                            if(match)window.__eteResolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6],sourceKind:match[7]||'unknown',direct:match[8]||'not_attempted'});
-                        }catch(_){ }
-                        return original.apply(console,arguments);
-                    };
-                })();void 0;`);
                 await evaluate(fs.readFileSync(path.join(__dirname,'../tests/live-acceptance-browser.js'),'utf8')+'\nvoid 0;');
-                const methods=process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_SELECT_ONLY?['inspect','select']:process.env.ETE_ACCEPT_DIRECT_SMOKE?['inspect','select','directSmoke']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
+                mark('flow-injected');
+                trace('flow-injected');
+                const override=String(process.env.ETE_ACCEPT_METHODS||'').split(',').map(name=>name.trim()).filter(name=>/^[A-Za-z]+$/.test(name));
+                const methods=override.length?override:process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_SELECT_ONLY?['inspect','select']:process.env.ETE_ACCEPT_DIRECT_SMOKE?['inspect','select','directSmoke']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
                 for(const method of methods){
                     report.currentStage=method;save();
+                    trace('method-start='+method);
                     const result=await evaluate('window.eteAcceptance.'+method+'()');
+                    trace('method-done='+method);
                     report.stages.push({method,result,time:new Date().toISOString()});save();
-                    if(result.ok===false){await end(method+'-failed');return;}
+                    if(method==='inspect'&&result&&result.moduleAcquisition)report.moduleAcquisition=result.moduleAcquisition;
+                    if(result&&result.ok===false){
+                        failure={method,reason:result.reason,failureClassification:result.failureClassification,stage:result.stage,errorType:result.errorType};
+                        report.failure=failure;
+                        report.acceptanceResult=failure.failureClassification || failure.reason || 'acceptance-failed';
+                        await end(method+'-failed');
+                        return;
+                    }
                 }
-                const pageResolverMessages=safeResolverRows(await evaluate('window.__eteResolverMessages || []'));
-                const combined=safeResolverRows(resolverMessages.concat(pageResolverMessages));
+                const combined=safeResolverRows(resolverMessages);
                 if(combined.length)report.resolver=combined;
+                recorder.setResolverRows(combined);
                 await end();
-            }catch(_){await end('acceptance-operation-failed');}
+            }catch(error){
+                // Sanitized: only the first line and frame of the failure, never data.
+                report.operationError=safeText(error&&error.message,160);
+                trace('operation-error '+report.operationError);
+                report.acceptanceResult='acceptance-operation-failed';
+                await end('acceptance-operation-failed');
+            }
         })();
     });
 });
+trace('harness-start');
+trace('runtime='+path.basename(runtime));
 require(path.join(runtime,'electronapp/main.js'));
+trace('product-main-loaded');

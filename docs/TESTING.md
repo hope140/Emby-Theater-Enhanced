@@ -10,6 +10,31 @@ python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv
 
 单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount 和 persistent profile inspect 安全枚举。当前为 56/56。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包验证。
 
+## Acceptance readiness harness
+
+正式 runner 为 `tests/readiness-acceptance.ps1`，每次只启动一个属于本次 run 的 Electron root PID，并以 `ProcessStartInfo` 传入已隔离 runtime、acceptance profile 和 CEC 路径。runner 维护 wall-clock deadline，超时只清理 exact root process tree，不按进程名全局终止；无论 Electron 是否进入 harness、崩溃或超时，都在 `.work/readiness-runs/<run-id>/` 生成 `runner-result.json`、`stdout.txt` 和 `stderr.txt`。`acceptanceReportPresent=false` 只表示产品 acceptance report 缺失，不会让 runner 无限等待。
+
+合成生命周期检查：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -Synthetic -TimeoutMs 1200 -RunPrefix synthetic
+node tests/acceptance-readiness-selftest.cjs
+```
+
+observer 只记录安装时间、`enhancedDiagnostics` wrapper、`enhancedDiagnostics(..., 'ready'/'playing')`、mpv embed、bridge message summary、resolver console marker 与可观察到的 loadfile。native bootstrap ready 不替代 authoritative Pepper-ready；模块解析和 `play-called`、`embed-created`、`pepper-ready`、`manager-play-resolved`、`resolver-result` gate 由 `tests/live-acceptance-browser.js` 解释。observer synthetic self-test 和 runner synthetic lifecycle 均通过，observer 为约 126 LOC，旧 AMD probe/event bus/timeline machinery 已删除。
+
+inspect acquisition 使用现有 `window.ConnectionManager.currentApiClient()`（必要时 `window.ApiClient`）、单次 canonical `require(['playbackManager'])` 和 `window.Events`，每个对象独立记录 source/result；不使用三模块 batch require、自动扫描或新的 AMD resolver。fixture 已验证 global API + single PlaybackManager require 与已有 PlaybackManager global 两条路径。
+
+2026-09-14 本轮唯一真实 run `module-acq-20260914-061651157-ec84996` 中 `inspect=PASS`、`select=PASS`、`play-called=seen`；三项 acquisition 分别为 `window.ConnectionManager.currentApiClient/available`、`amd-require:playbackManager/available`、`window.Events/available`。后续观察到 embed、authoritative ready 和 manager-play resolved，但 flow 在 `resolver-entry-timeout` 停止，`loadfile` 未观察；因此没有新增完整 PlaybackManager/Session/WebSocket/远控或 DirectUrl 全链通过证据。runner 达到 240000ms deadline 后按 exact root process tree 清理，报告、stdout/stderr 存在，ownership inspection=ok，residual=0；真实 run 之后没有再次运行 acceptance。
+
+静态复核补充：该 run 的默认 runtime 是 `dist/EmbyTheaterEnhanced-0.1.1-final-win-x64`，其中实际 `libmpv.js` 没有 `strmResolver.resolveAsync` 或 resolver marker；当前 resolver-bearing runtime 为 `dist/EmbyTheaterEnhanced-0.1.1-readiness-b-main-20260914`，其 `libmpv.js` 与 `src/electronapp/plugins/libmpv.js` hash 一致。故该 run 的 resolver missing 首要归类为 runtime provenance，而不是产品 resolver regression。当前 source 的 resolver call 在 `libmpv.js:647`，decision log 在 `:677`，loadfile 在 `:788-790`；observer 把 decision log 命名为 `resolver-enter`，并因 `embed-command-hook-failed` 无法权威观察 outgoing loadfile。未执行第二次真实 acceptance。
+
+current-main verification runtime：`dist/EmbyTheaterEnhanced-0.1.1-readiness-main-20260914` 从 HEAD `c880b97757be422ae818fe30b3a335003e41227b` 构建，`libmpv.js`、`strm-resolver.js`、`cd2-resolver.js`、`enhanced/cd2-service.js` 四项 source/runtime SHA256 均 MATCH，resolver directory 存在，`resolveAsync` 与 resolver-result marker 存在。runner 对旧 `final-win-x64` 的 fail-fast negative 已通过，未启动 Electron。`resolver-enter` 已更名为 `resolver-result`；loadfile observation 为 `unavailable`，不再作为硬 gate。
+
+runner terminal lifecycle：以 `acceptance.json` 的 `completed=true` + terminal classification 作为唯一终态；terminal success/failure 后等待 300ms flush window 并清理 exact owned root tree，只有没有 terminal report 才到达 deadline。synthetic success/failure/timeout 均通过，成功与明确失败为 `runnerResult=completed`、`timedOut=false`，真正 hang 为 `runnerResult=timeout`、`timedOut=true`，均 residual=0。
+
+唯一一次 current-main real run `readiness-main-20260914-070236533-48d1e60e`：`inspect=PASS`、`select=PASS`、`isStrm=true`、`play-called`、`embed-created`、`pepper-ready`、`manager-play-resolved`、`resolver-result` 全部通过；`loadfileObservation=unavailable`，acceptance 结果为 `success`。runner 在 terminal report 后总耗时 `15959ms`，`runnerResult=completed`、`timedOut=false`，exact root cleanup 后 residual=0。真实 run 之后没有再次运行 acceptance。
+
 ## CloudDrive2 PR #4 DirectUrl
 
 安全门探针：
@@ -115,6 +140,7 @@ UI/runtime 测试必须串行执行。测试输出只保留在 `.work` 隔离目
 | PR #4 frozen file-local UA | UA-A → UA-B → same-origin C 均播放推进；NO LEAK |
 | PR #4 real DirectUrl 分层 smoke | persistent-profile 真样本返回 required UA/expiry；embedded libmpv path/format/core-playing/time advancing 通过 |
 | PR #4 real Emby 全链 | `manager.play()` 在 resolver 前 timeout；Session/WebSocket/controls/reports 未取得本轮通过证据 |
+| Acceptance runner/observer | terminal success/failure/timeout synthetic 与 observer self-test 通过；current-main runtime validation 通过，inspect/select/play-called/resolver-result/manager-play-resolved 主链通过；loadfile observation unavailable，不作为 gate；runner completed/timedOut=false/residual=0 |
 
 后续可见测试结果及最新状态以 PROJECT_STATUS 和 DEVELOPMENT_LOG 为准。隔离 runtime 的 Mount 命中不替代真实 Emby 服务器 Mount 验收。
 
