@@ -3,6 +3,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
 if ($OutputName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'OutputName must be a simple directory name.' }
+$sourceCommit = ([string]((& git -C $root rev-parse HEAD 2>$null) | Select-Object -First 1)).Trim()
+if ($sourceCommit -notmatch '^[0-9a-fA-F]{40}$') { throw 'Unable to resolve source git commit.' }
 $destination = Join-Path (Join-Path $root 'dist') $OutputName
 if (Test-Path -LiteralPath $destination) { throw 'Output already exists. Choose a new -OutputName; builds never overwrite prior artifacts.' }
 $manifest = Get-Content -LiteralPath (Join-Path $root 'vendor/runtime-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -46,6 +48,8 @@ if (-not $configText.Contains('%ApplicationData%\EmbyTheaterEnhanced')) { throw 
 [IO.File]::WriteAllText($configPath, $configText, $utf8)
 Copy-Item -LiteralPath (Join-Path $root 'tools/Start-Enhanced.ps1') -Destination $destination
 Copy-Item -LiteralPath (Join-Path $root 'tools/Start-Enhanced.cmd') -Destination $destination
+& node (Join-Path $root 'tools/runtime-provenance.cjs') write $root $destination $sourceCommit
+if ($LASTEXITCODE -ne 0) { throw 'Runtime provenance generation failed.' }
 $files = @(Get-ChildItem -LiteralPath $destination -Recurse -File | Sort-Object FullName | ForEach-Object {
     @{ path=$_.FullName.Substring($destination.Length + 1).Replace('\','/'); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })

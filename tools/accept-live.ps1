@@ -24,8 +24,13 @@ if(-not $InspectProfile -and -not $LaunchManualLogin -and -not $AuthorizedLivePl
 if($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$'){throw 'Invalid runtime name.'}
 $runtime=Join-Path (Join-Path $root 'dist') $RuntimeName
 if(-not (Test-Path -LiteralPath (Join-Path $runtime 'x64/electron/electron.exe'))){throw 'Requested runtime does not exist.'}
-$runtimeLibmpv=Join-Path $runtime 'electronapp/plugins/libmpv.js'
-if(-not (Test-Path -LiteralPath (Join-Path $runtime 'electronapp/resolvers') -PathType Container) -or -not (Test-Path -LiteralPath $runtimeLibmpv -PathType Leaf) -or -not ([IO.File]::ReadAllText($runtimeLibmpv).Contains('strmResolver.resolveAsync'))){throw 'runtime-validation-failed'}
+$sourceCommit=([string]((& git -C $root rev-parse HEAD 2>$null)|Select-Object -First 1)).Trim()
+if($sourceCommit -notmatch '^[0-9a-fA-F]{40}$'){throw 'Unable to resolve source git commit.'}
+$provenanceText=(& node (Join-Path $root 'tools/runtime-provenance.cjs') validate $root $runtime $sourceCommit 2>$null|Out-String)
+$provenanceExit=$LASTEXITCODE
+$provenance=$null
+try{$provenance=$provenanceText|ConvertFrom-Json}catch{}
+if($provenanceExit -ne 0 -or $null -eq $provenance -or $provenance.status -ne 'passed'){throw 'runtime-validation-failed'}
 $profilePath=Assert-OutsideRepository (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'EmbyTheaterEnhanced-Acceptance')
 if(-not $LaunchManualLogin -and @((Get-Process -Name 'Emby.Theater' -ErrorAction SilentlyContinue)).Count){throw 'Close the idle Enhanced host before acceptance; do not interrupt existing playback.'}
 $profileExists=Test-Path -LiteralPath $profilePath -PathType Container

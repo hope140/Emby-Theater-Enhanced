@@ -1,12 +1,29 @@
 # 开发日志
 
+## 2026-09-14 — readiness harness boundary hardening
+
+本轮是 readiness harness 的独立 follow-up 审计，产品代码、PlaybackManager、libmpv、preload、CD2、Pepper bridge、resolver 和服务器配置均保持不变。runtime provenance 从少量 sentinel 扩展为构建范围清单：覆盖 `src/electronapp` 的全部 818 个文件和两个 `Start-Enhanced` wrapper，共 820 个 scope entries；`package.json` 元数据与 PlaybackManager 改写分别记录为显式 build overlay。`sourceCommit`、`validatedProductScope` 与 `baselineIdentity` 分开保存，vendor baseline、node_modules production closure、Electron runtime binary 和 native mpv 不归入产品 scope。
+
+`dist/EmbyTheaterEnhanced-0.1.1-provenance2-20260914` 在 follow-up commit 前绑定 baseline `3d1cc6d906131d2e7e1d0a10af5fd354b228a41d`，full provenance positive validation 与 package payload verification 通过；旧 partial-stale runtime 的 ValidationOnly negative 以 `runtime-validation-failed` fail-fast，未启动 Electron。runner 的 terminal guard 采用 `OPEN → FINALIZING → COMPLETED` 单写入语义，success/failure/timeout 与 terminal race synthetic 均通过；PID cleanup 在 kill 前重新读取 root PID 的 CreationDate，synthetic mismatch 记录 `pid-reused`/`ownership-mismatch`，不执行不属于本次 run 的清理。
+
+历史 real artifact 分开保留：`readiness-main-20260914-070236533-48d1e60e` 是旧 runner lifecycle 下 acceptance success 但 `runnerResult=timeout`、总耗时 `242507ms`；`terminal-real-20260914-073146032-27837240` 是终态收尾修复后的 acceptance success、`runnerResult=completed`、`timedOut=false`、总耗时 `15959ms`、residual=0。两次均将 `loadfileObservation=unavailable` 作为 observability gap，不作为 gate。本轮 follow-up 没有运行真实 acceptance。
+
+文档同步更正了 fixture 覆盖范围：可重复 fixture 覆盖 profile inspect 的 client lookup；global API、single PlaybackManager require 与 global fallback 不再被描述为已有独立 fixture 证明，而以 acceptance flow/real artifact 证据区分记录。旧 `guard()` helper 已移除。
+
+Model Tier: 1
+Model: current Codex session
+Reason: bounded provenance, terminal lifecycle and process ownership review; product playback lifecycle remained frozen
+Escalated: no
+
+结论：readiness harness follow-up 的 provenance、terminal race 与 PID ownership 边界已完成静态/合成验证，已形成独立提交并可进入 review；不推送、不创建 PR、不运行真实 acceptance。
+
 ## 2026-09-14 — runner terminal lifecycle follow-up
 
 本轮只修改 acceptance runner 的终态收尾与 synthetic child，产品代码、resolver、observer 事实采集和 loadfile 观测均未修改。`tests/readiness-acceptance.ps1` 现在以 `acceptance.json` 的 `completed=true` 且存在安全 terminal classification 作为唯一终态来源；检测后等待 300ms flush window，再只清理本次启动的 exact root process tree。240000ms deadline 仍保留给无 terminal report 的 hang，并以 `timedOut=true` / `runnerResult=timeout` 区分。
 
 synthetic success 在约 2.5s 内返回 `runnerResult=completed`、`timedOut=false`、residual=0；synthetic terminal failure 同样提前结束并保留 runner exit code 1；无 terminal report 的 timeout case 返回 `runnerResult=timeout`、`timedOut=true`、residual=0。未使用全局进程名清理。
 
-唯一一次 current-main real acceptance 使用已校验 runtime，terminal success 在约 14.2s 被识别，runner 总耗时 15.959s，`runnerResult=completed`、`timedOut=false`、acceptance report 存在、root PID 52620 的 exact cleanup 后 residual owned processes=0。`processExitCode=1` 是 taskkill 后的 child 状态，runner 根据 terminal classification 正确返回 `runnerExitCode=0`。真实 acceptance 之后不再运行第二次。
+较新的 `terminal-real-20260914-073146032-27837240` acceptance artifact 使用已校验 runtime，terminal success 在约 14.2s 被识别，runner 总耗时 15.959s，`runnerResult=completed`、`timedOut=false`、acceptance report 存在、root PID 52620 的 exact cleanup 后 residual owned processes=0。`processExitCode=1` 是 taskkill 后的 child 状态，runner 根据 terminal classification 正确返回 `runnerExitCode=0`。本 follow-up 不运行真实 acceptance。
 
 Model Tier: 1
 Model: current Codex session
@@ -21,7 +38,7 @@ Escalated: no
 
 更正 gate 语义：`resolver-enter` 改为 `resolver-result`，因为现有产品日志在 `await strmResolver.resolveAsync(...)` 返回后才输出；observer 轮询中恢复被 app 覆盖的 console hook。loadfile 保持 observability gap：embed outgoing `postMessage` wrapper 仍失败并记录 `embed-command-hook-failed`，因此 loadfile 只报告 `unavailable`，不作为硬 gate。产品代码与 PlaybackManager/libmpv 实现未修改。
 
-按用户限定只执行一次 current-main real acceptance，run `readiness-main-20260914-070236533-48d1e60e`。runtime validation=passed；`inspect=PASS`、`select=PASS`、`isStrm=true`、容器为 `mkv`/`mp4`、`play-called`、`embed-created`、Pepper authoritative-ready、`manager-play-resolved`、`resolver-result` 全部通过。`loadfileObservation=unavailable`，未作为失败条件；acceptance 主链结果为 `success`，没有新增完整控制链之外的额外结论。runner 达到 240000ms child deadline 后总耗时 242507ms，报告、stdout/stderr 存在，ownership inspection=ok，exact root process tree cleanup 后 residual owned processes=0。真实 acceptance 之后不再运行第二次。
+旧 runner lifecycle iteration 使用 `readiness-main-20260914-070236533-48d1e60e`。runtime validation=passed；`inspect=PASS`、`select=PASS`、`isStrm=true`、容器为 `mkv`/`mp4`、`play-called`、`embed-created`、Pepper authoritative-ready、`manager-play-resolved`、`resolver-result` 全部通过。`loadfileObservation=unavailable`，未作为失败条件；acceptance 主链结果为 `success`，没有新增完整控制链之外的额外结论。runner 达到 240000ms child deadline 后总耗时 242507ms，报告、stdout/stderr 存在，ownership inspection=ok，exact root process tree cleanup 后 residual owned processes=0。
 
 Model Tier: 1
 Model: current Codex session
@@ -50,14 +67,14 @@ Escalated: no
 
 最小 fixture 验证了 global API + single playbackManager require，以及已有 playbackManager global 两条受控路径；JS/PowerShell syntax、observer self-test、runner synthetic（exact root cleanup/residual 0）、`npm test` 56/56 和 `git diff --check` 通过。
 
-按用户限定，本轮只执行一次真实 acceptance，run `module-acq-20260914-061651157-ec84996`。`inspect=PASS`、`select=PASS`、`play-called=seen`；acquisition 为 `currentApiClient=window.ConnectionManager.currentApiClient/available`、`PlaybackManager=amd-require:playbackManager/available`、`Events=window.Events/available`。随后 `embed-created`、Pepper authoritative-ready 与 `manager-play-resolved` 均被观察到，但 `resolver-enter` 未观察到，flow 以 `resolver-entry-timeout` 停止，`loadfile` 未观察到；没有新增完整 resolver/Session/remote-control/DirectUrl 全链通过结论。runner 最终达到 240000ms bounded deadline，报告存在，ownership inspection=ok，residual owned processes=0，并按 exact root process tree 清理。真实 acceptance 之后不再运行第二次。
+旧 `module-acq-20260914-061651157-ec84996` iteration 中，`inspect=PASS`、`select=PASS`、`play-called=seen`；acquisition 为 `currentApiClient=window.ConnectionManager.currentApiClient/available`、`PlaybackManager=amd-require:playbackManager/available`、`Events=window.Events/available`。随后 `embed-created`、Pepper authoritative-ready 与 `manager-play-resolved` 均被观察到，但 `resolver-enter` 未观察到，flow 以 `resolver-entry-timeout` 停止，`loadfile` 未观察到；没有新增完整 resolver/Session/remote-control/DirectUrl 全链通过结论。runner 最终达到 240000ms bounded deadline，报告存在，ownership inspection=ok，residual owned processes=0，并按 exact root process tree 清理。
 
 Model Tier: 1
 Model: current Codex session
 Reason: acceptance-only single-module acquisition and report classification; product playback lifecycle remained frozen
 Escalated: no
 
-结论：本轮 inspect module acquisition 目标完成并可进入 harness review；完整实服播放验收仍停在后续 `resolver-entry-timeout`，不提交、不推送、不发布。
+历史结论：该 iteration 的 inspect module acquisition 目标完成并可进入 harness review；完整实服播放验收当时仍停在后续 `resolver-entry-timeout`。
 
 ## 2026-09-14 — acceptance readiness runner 与 observer 收敛
 
@@ -67,7 +84,7 @@ Escalated: no
 
 静态与合成验证：`npm test` 56/56；修改/新增 JS 与 `tests/readiness-acceptance.ps1` PowerShell syntax PASS；`git diff --check` PASS；observer synthetic self-test PASS；runner synthetic child 写入 stdout/stderr 后在 1.2 秒 deadline 被精确终止，`runner-result=timeout`、runner exit code 124、stdout/stderr 文件存在、ownership inspection=ok、residual owned processes=0。synthetic 的 child process exit code 1 是 taskkill 终止结果，不作为 runner failure 误报。
 
-按用户限定只执行一次真实 acceptance。`single-real` runner 在 47.2 秒内完成，`acceptance.json`、stdout/stderr 均存在，ownership inspection=ok、residual=0；Electron 子进程因 acceptance 失败返回 1，runner 如实返回 1。flow 在 `inspect` 阶段以 `module-resolution-timeout` 结束，没有 `play-called`、embed、Pepper-ready、manager-play-resolved、resolver-enter 或 loadfile 事实，因此没有真实播放/Session/远控通过证据。该次真实运行后仅补充了 flow 的 bare/window AMD loader 兼容尝试，未再次运行真实 acceptance，当前代码的该补充只经过静态语法验证。
+旧 `single-real` iteration 的 runner 在 47.2 秒内完成，`acceptance.json`、stdout/stderr 均存在，ownership inspection=ok、residual=0；Electron 子进程因 acceptance 失败返回 1，runner 如实返回 1。flow 在 `inspect` 阶段以 `module-resolution-timeout` 结束，没有 `play-called`、embed、Pepper-ready、manager-play-resolved、resolver-enter 或 loadfile 事实，因此没有真实播放/Session/远控通过证据。该次真实运行后仅补充了 flow 的 bare/window AMD loader 兼容尝试，当前代码的该补充只经过静态语法验证。
 
 Model Tier: 2
 Model: current Codex session

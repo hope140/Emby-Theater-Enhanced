@@ -5,6 +5,7 @@ const {app} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const readiness = require('./acceptance-readiness.cjs');
+const {createFinishOnce} = require('./acceptance-terminal-guard.cjs');
 const runtime=process.env.ETE_ACCEPT_RUNTIME;
 const output=process.env.ETE_ACCEPT_OUTPUT;
 if(!runtime || !output) throw Error('Live acceptance parameters required');
@@ -24,7 +25,6 @@ const report={startedAt:new Date().toISOString(),version:metadata.version,runtim
 const resolverMessages=[];
 let failure=null;
 function trace(stage){try{fs.writeFileSync(path.join(output,'acceptance-trace.txt'),stage+'\r\n',{flag:'a'});}catch(_){}}
-function guard(stage,action){try{return action();}catch(error){trace('error@'+stage+' '+String(error&&error.message||error));throw error;}}
 function mark(stage){recorder.mark(stage,Date.now()-epoch);}
 function recordResolverMessage(message){
     const match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)(?: sourceKind=([A-Za-z0-9_-]+) direct=([A-Za-z0-9_-]+))?/.exec(String(message||''));
@@ -42,7 +42,7 @@ function safeText(value,limit){
     const text=String(value||'').replace(/[A-Za-z]:\\[^\s'"]*/g,'<path>').replace(/\s+/g,' ').trim();
     return text.length>limit?text.slice(0,limit):text;
 }
-async function end(error){
+const end=createFinishOnce(async function(error){
     if(report.completed)return;
     try{
         const state=await evaluate('window.__eteReadiness ? window.__eteReadiness.snapshot() : null');
@@ -55,7 +55,7 @@ async function end(error){
     report.error=error || null;
     report.acceptanceResult=error ? (failure && failure.failureClassification || error) : 'success';
     report.completed=true;save();app.exit(error?1:0);
-}
+});
 async function inspectProfile(){
     const result=await evaluate('('+profileInspectSource+')(require)');
     report.loggedIn=!!(result&&result.loggedIn);

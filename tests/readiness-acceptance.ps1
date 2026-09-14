@@ -4,8 +4,9 @@ param(
     [string]$Methods = '',
     [int]$TimeoutMs = 180000,
     [switch]$AuthorizedLivePlayback,
+    [switch]$ValidationOnly,
     [switch]$Synthetic,
-    [ValidateSet('timeout', 'success', 'failure')]
+    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch')]
     [string]$SyntheticResult = 'timeout'
 )
 
@@ -16,7 +17,7 @@ if ($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid runt
 if ($RunPrefix -notmatch '^[A-Za-z0-9._-]+$') { throw 'Invalid run prefix.' }
 if ($Methods -and $Methods -notmatch '^[A-Za-z]+(?:,[A-Za-z]+)*$') { throw 'Methods must be a comma-separated method list.' }
 if ($TimeoutMs -lt 250 -or $TimeoutMs -gt 900000) { throw 'TimeoutMs must be between 250 and 900000.' }
-if (-not $Synthetic -and -not $AuthorizedLivePlayback) { throw 'Explicit live playback authorization is required.' }
+if (-not $Synthetic -and -not $ValidationOnly -and -not $AuthorizedLivePlayback) { throw 'Explicit live playback authorization is required.' }
 
 $runtime = Join-Path $root ('dist\' + $RuntimeName)
 if (-not $Synthetic -and -not (Test-Path -LiteralPath (Join-Path $runtime 'x64\electron\electron.exe') -PathType Leaf)) {
@@ -38,6 +39,7 @@ $terminalClassification = $null
 $terminalObservedElapsedMs = $null
 $startError = $null
 $ownershipInspection = 'unavailable'
+$ownershipIssues = New-Object 'System.Collections.Generic.HashSet[string]'
 $ownedPids = New-Object 'System.Collections.Generic.HashSet[int]'
 $ownedRecords = @{}
 $stdoutTask = $null
@@ -59,55 +61,25 @@ function Get-SourceCommit {
 }
 
 function Get-RuntimeValidation([string]$runtimePath, [string]$runtimeName, [string]$sourceCommit) {
-    $criticalFiles = @(
-        'electronapp/plugins/libmpv.js',
-        'electronapp/resolvers/strm-resolver.js',
-        'electronapp/resolvers/cd2-resolver.js',
-        'electronapp/enhanced/cd2-service.js'
-    )
-    $rows = @()
-    $errors = @()
-    $resolverDirectory = Join-Path $runtimePath 'electronapp/resolvers'
-    $resolverDirectoryPresent = Test-Path -LiteralPath $resolverDirectory -PathType Container
-    if (-not $resolverDirectoryPresent) { $errors += 'resolver-directory-missing' }
-    if ($sourceCommit -notmatch '^[0-9a-fA-F]{40}$') { $errors += 'source-commit-unavailable' }
-
-    foreach ($relative in $criticalFiles) {
-        $sourcePath = Join-Path $root ('src/' + $relative)
-        $runtimeFile = Join-Path $runtimePath $relative
-        $sourceExists = Test-Path -LiteralPath $sourcePath -PathType Leaf
-        $runtimeExists = Test-Path -LiteralPath $runtimeFile -PathType Leaf
-        $sourceHash = $null
-        $runtimeHash = $null
-        if ($sourceExists) { $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $sourcePath).Hash }
-        if ($runtimeExists) { $runtimeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $runtimeFile).Hash }
-        $match = $sourceExists -and $runtimeExists -and ($sourceHash -eq $runtimeHash)
-        $rows += [ordered]@{ path = $relative; sourceSha256 = $sourceHash; runtimeSha256 = $runtimeHash; match = $match }
-        if (-not $sourceExists) { $errors += 'source-file-missing:' + $relative }
-        if (-not $runtimeExists) { $errors += 'runtime-file-missing:' + $relative }
-        if ($sourceExists -and $runtimeExists -and -not $match) { $errors += 'hash-mismatch:' + $relative }
-    }
-
-    $runtimeLibmpv = Join-Path $runtimePath 'electronapp/plugins/libmpv.js'
-    $containsResolveAsyncCall = $false
-    $containsResolverResultMarker = $false
-    if (Test-Path -LiteralPath $runtimeLibmpv -PathType Leaf) {
-        $libmpvText = [IO.File]::ReadAllText($runtimeLibmpv)
-        $containsResolveAsyncCall = $libmpvText.Contains('strmResolver.resolveAsync')
-        $containsResolverResultMarker = $libmpvText.Contains('STRM resolver: invoked')
-    }
-    if (-not $containsResolveAsyncCall) { $errors += 'resolveAsync-marker-missing' }
-    if (-not $containsResolverResultMarker) { $errors += 'resolver-result-marker-missing' }
-
-    return [ordered]@{
-        status = if ($errors.Count -eq 0) { 'passed' } else { 'failed' }
-        sourceCommit = $sourceCommit
-        runtimeName = $runtimeName
-        resolverDirectory = if ($resolverDirectoryPresent) { 'present' } else { 'missing' }
-        containsResolveAsyncCall = $containsResolveAsyncCall
-        containsResolverResultMarker = $containsResolverResultMarker
-        criticalFiles = @($rows)
-        errors = @($errors)
+    $tool = Join-Path $root 'tools/runtime-provenance.cjs'
+    $text = (& node $tool validate $root $runtimePath $sourceCommit 2>$null | Out-String)
+    $exitCode = $LASTEXITCODE
+    try {
+        $result = $text | ConvertFrom-Json
+        if ($exitCode -ne 0 -and $result.status -eq 'passed') { $result.status = 'failed' }
+        return $result
+    } catch {
+        return [ordered]@{
+            schemaVersion = 1
+            status = 'failed'
+            sourceCommit = $sourceCommit
+            runtimeName = $runtimeName
+            manifest = 'runtime-provenance.json'
+            baselineIdentity = $null
+            validatedProductScope = $null
+            files = @()
+            errors = @('runtime-provenance-validator-failed')
+        }
     }
 }
 
@@ -118,7 +90,7 @@ $runtimeValidation = if ($Synthetic) {
     Get-RuntimeValidation -runtimePath $runtime -runtimeName $RuntimeName -sourceCommit $sourceCommit
 }
 
-if (-not $Synthetic -and $runtimeValidation.status -ne 'passed') {
+if (-not $Synthetic -and -not $ValidationOnly -and $runtimeValidation.status -ne 'passed') {
     Write-Utf8Text (Join-Path $output 'stdout.txt') ''
     Write-Utf8Text (Join-Path $output 'stderr.txt') ''
     $elapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds
@@ -147,6 +119,40 @@ if (-not $Synthetic -and $runtimeValidation.status -ne 'passed') {
     Write-Utf8Text (Join-Path $output 'runner-result.json') $failureJson
     Write-Output $failureJson
     exit 1
+}
+
+if ($ValidationOnly) {
+    $validationPassed = $runtimeValidation.status -eq 'passed'
+    Write-Utf8Text (Join-Path $output 'stdout.txt') ''
+    Write-Utf8Text (Join-Path $output 'stderr.txt') ''
+    $validationResult = [ordered]@{
+        schemaVersion = 1
+        runnerResult = if ($validationPassed) { 'runtime-validation-passed' } else { 'runtime-validation-failed' }
+        runtimeName = $RuntimeName
+        sourceCommit = $sourceCommit
+        runtimeValidation = $runtimeValidation
+        terminalResult = [ordered]@{ observed = $true; source = 'runtime-validation'; classification = if ($validationPassed) { 'runtime-validation-passed' } else { 'runtime-validation-failed' }; observedElapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds }
+        rootPid = $null
+        elapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds
+        deadlineMs = $TimeoutMs
+        timedOut = $false
+        processExitCode = $null
+        runnerExitCode = if ($validationPassed) { 0 } else { 1 }
+        acceptanceReportPresent = $false
+        stdoutPresent = $true
+        stderrPresent = $true
+        ownershipInspection = 'not-started'
+        ownershipIssues = @()
+        residualOwnedProcesses = 0
+        residualOwnedPids = @()
+        cleanup = 'not-started'
+        output = $output
+        error = if ($validationPassed) { $null } else { 'runtime-validation-failed' }
+    }
+    $validationJson = $validationResult | ConvertTo-Json -Depth 12
+    Write-Utf8Text (Join-Path $output 'runner-result.json') $validationJson
+    Write-Output $validationJson
+    exit $validationResult.runnerExitCode
 }
 
 function Get-ProcessSnapshot {
@@ -201,13 +207,49 @@ function Get-LiveOwnedRecords {
     $live = @()
     foreach ($ownedId in @($ownedPids)) {
         $expected = $ownedRecords[[int]$ownedId]
+        if ($null -eq $expected -or [string]::IsNullOrEmpty([string]$expected.CreationDate)) {
+            Add-OwnershipIssue 'ownership-mismatch'
+            continue
+        }
         $matches = @($snapshot | Where-Object {
             [int]$_.Id -eq [int]$ownedId -and
-            ($null -eq $expected -or [string]::IsNullOrEmpty([string]$expected.CreationDate) -or [string]$_.CreationDate -eq [string]$expected.CreationDate)
+            [string]$_.CreationDate -eq [string]$expected.CreationDate
         })
         if ($matches.Count -gt 0) { $live += $matches[0] }
     }
     return @($live)
+}
+
+function Add-OwnershipIssue([string]$issue) {
+    if ($issue) { [void]$ownershipIssues.Add($issue) }
+}
+
+function Get-RootOwnership {
+    if ($null -eq $rootPid) { return [pscustomobject]@{ status = 'no-root' } }
+    $snapshot = Get-ProcessSnapshot
+    if ($snapshot.Count -eq 0) {
+        Add-OwnershipIssue 'ownership-unavailable'
+        return [pscustomobject]@{ status = 'unavailable' }
+    }
+    $current = @($snapshot | Where-Object { [int]$_.Id -eq [int]$rootPid } | Select-Object -First 1)
+    if ($current.Count -eq 0) { return [pscustomobject]@{ status = 'exited' } }
+    $expected = $ownedRecords[[int]$rootPid]
+    if ($null -eq $expected -or [string]::IsNullOrEmpty([string]$expected.CreationDate)) {
+        Add-OwnershipIssue 'ownership-mismatch'
+        return [pscustomobject]@{ status = 'mismatch' }
+    }
+    if ([string]$current[0].CreationDate -ne [string]$expected.CreationDate) {
+        Add-OwnershipIssue 'pid-reused'
+        Add-OwnershipIssue 'ownership-mismatch'
+        return [pscustomobject]@{ status = 'pid-reused'; expectedCreationDate = [string]$expected.CreationDate; currentCreationDate = [string]$current[0].CreationDate }
+    }
+    return [pscustomobject]@{ status = 'owned' }
+}
+
+function Stop-OwnedRoot {
+    $ownership = Get-RootOwnership
+    if ($ownership.status -eq 'owned') { Stop-ExactProcessTree -targetPid ([int]$rootPid) }
+    return $ownership.status
 }
 
 function Get-TerminalAcceptance([string]$reportPath) {
@@ -231,9 +273,9 @@ function Stop-ExactProcessTree([int]$targetPid) {
 }
 
 function Stop-OwnedProcesses([bool]$includeRoot) {
-    if ($includeRoot -and $null -ne $rootPid) { Stop-ExactProcessTree -targetPid ([int]$rootPid) }
+    if ($includeRoot -and $null -ne $rootPid) { [void](Stop-OwnedRoot) }
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
-        $live = @(Get-LiveOwnedRecords | Where-Object { $includeRoot -or $null -eq $rootPid -or [int]$_.Id -ne [int]$rootPid })
+        $live = @(Get-LiveOwnedRecords | Where-Object { $null -eq $rootPid -or [int]$_.Id -ne [int]$rootPid })
         if ($live.Count -eq 0) { break }
         foreach ($row in $live) { Stop-ExactProcessTree -targetPid ([int]$row.Id) }
         Start-Sleep -Milliseconds 200
@@ -306,6 +348,14 @@ try {
             $terminalObserved = $true
             $terminalClassification = $terminal.classification
             $terminalObservedElapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds
+            if ($Synthetic -and $SyntheticResult -eq 'identity-mismatch') {
+                $expectedRoot = $ownedRecords[[int]$rootPid]
+                if ($null -ne $expectedRoot) {
+                    $ownedRecords[[int]$rootPid] = [pscustomobject]@{ Id = $expectedRoot.Id; ParentId = $expectedRoot.ParentId; Name = $expectedRoot.Name; CreationDate = 'synthetic-pid-reused' }
+                } else {
+                    Add-OwnershipIssue 'ownership-mismatch'
+                }
+            }
             # Let the final JSON write and stdout/stderr flush settle, then own the cleanup.
             Start-Sleep -Milliseconds 300
             Stop-OwnedProcesses -includeRoot $true
@@ -367,6 +417,7 @@ try {
         sourceCommit = $sourceCommit
         runtimeValidation = $runtimeValidation
         terminalResult = [ordered]@{ observed = $terminalObserved; source = if ($terminalObserved) { 'acceptance.json completed + classification' } else { 'not-observed' }; classification = $terminalClassification; observedElapsedMs = $terminalObservedElapsedMs }
+        ownershipIssues = @($ownershipIssues)
         rootPid = $rootPid
         elapsedMs = $elapsedMs
         deadlineMs = $TimeoutMs
