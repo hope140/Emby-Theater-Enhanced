@@ -38,3 +38,7 @@
 36. 空 cloudPrefix 与显式 `/` 必须区分：前者是缺配置，后者是合法 cloud-root mapping。
 37. 真实 Emby 的 Item/MediaSource 路径可能是 absolute POSIX，即使客户端运行在 Windows。单条 mapping 需要按路径风格选择大小写规则，不能把 Windows 平台等同于 Windows source identity。
 38. Pepper bridge 当前没有转发 mpv start-file/file-loaded/end-file/log-message；真实媒体验收可直接观察 path/core-playing/core-idle/time-pos，并以 file-format+track-list 推断 file-loaded，但必须标明证据性质。
+39. 当前 exact Pepper/mpv 0.41 已实测 `loadfile <url> replace -1 user-agent=<value>` 的 per-file 恢复语义：UA-A → UA-B → same-origin C 无泄漏。这个结论只覆盖严格校验的 User-Agent，不自动扩展到 `http-header-fields` 或任意 additionalHeaders。
+40. DirectUrl acquisition 可以复用同一次 `get_direct_url=true` 响应里的 `downloadUrlPath`，但 transport timeout 仍可能需要第二次 same-origin RPC；两者必须共享一个 absolute budget，并为 fallback 保留实际时间，不能串联两个完整 timeout。
+41. 真实 DirectUrl 在独立 embedded libmpv 中推进不等于完整 Emby 验收。若 PlaybackManager 在 resolver 日志出现前超时，应把 source acquisition/libmpv 与 Session/WebSocket/controls/reports 分层报告，不能把 PR #2 的 same-origin 全链证据迁移为 PR #4 通过。
+42. blocker 修复后不能仅按 runtime 目录名复用旧 frozen 产物；关键 `src/` 文件必须与 verification runtime 做逐文件 hash 校验，确保测试确实覆盖最新预算和 UA fail-closed 逻辑。

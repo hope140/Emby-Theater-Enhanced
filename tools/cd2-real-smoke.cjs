@@ -39,10 +39,26 @@ function probe(source, method, headers) {
             process.exitCode = 1;
             return;
         }
-        const head = await probe(resolved.source, 'HEAD');
-        const range = await probe(resolved.source, 'GET', {Range: 'bytes=0-0', 'Accept-Encoding': 'identity'});
-        const ok = head.status === 200 && range.status === 206 && range.contentRange === 'present';
-        console.log(JSON.stringify({ok, resolve: 'hit', sourceType: 'same-origin-http', head, range}));
+        const direct = resolved.sourceKind === 'direct-url';
+        const requestHeaders = {Range: 'bytes=0-0', 'Accept-Encoding': 'identity'};
+        if (direct && resolved.requestOptions && resolved.requestOptions.userAgent) {
+            requestHeaders['User-Agent'] = resolved.requestOptions.userAgent;
+        }
+        const headHeaders = {};
+        if (requestHeaders['User-Agent']) headHeaders['User-Agent'] = requestHeaders['User-Agent'];
+        const head = await probe(resolved.source, 'HEAD', headHeaders);
+        const range = await probe(resolved.source, 'GET', requestHeaders);
+        const ok = (direct || head.status === 200) && range.status === 206 && range.contentRange === 'present';
+        console.log(JSON.stringify({
+            ok,
+            resolve: 'hit',
+            sourceType: direct ? 'direct-url' : 'same-origin-http',
+            userAgentPresent: !!requestHeaders['User-Agent'],
+            expiresInPresent: resolved.expiresAt !== undefined,
+            additionalHeadersSupported: false,
+            head,
+            range
+        }));
         process.exitCode = ok ? 0 : 1;
     } catch (error) {
         console.log(JSON.stringify({ok: false, resolve: 'error', errorType: error && error.name || 'Error'}));

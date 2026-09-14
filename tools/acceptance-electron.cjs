@@ -19,12 +19,12 @@ let busy=false;
 const report={startedAt:new Date().toISOString(),version:metadata.version,stages:[],completed:false};
 const resolverMessages=[];
 function recordResolverMessage(message){
-    const match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)/.exec(String(message||''));
-    if(match)resolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6]});
+    const match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)(?: sourceKind=([A-Za-z0-9_-]+) direct=([A-Za-z0-9_-]+))?/.exec(String(message||''));
+    if(match)resolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6],sourceKind:match[7]||'unknown',direct:match[8]||'not_attempted'});
 }
 function safeResolverRows(rows){
     if(!Array.isArray(rows))return [];
-    return rows.filter(row=>row&&/^(yes|no)$/.test(row.isStrm||'')&&/^[A-Za-z0-9_-]+$/.test(row.type||'')&&/^[A-Za-z0-9_-]+$/.test(row.reason||'')&&/^[A-Za-z0-9_-]+$/.test(row.cd2||'')&&/^(yes|no)$/.test(row.localExists||'')&&/^(yes|no)$/.test(row.fallback||'')).map(row=>({isStrm:row.isStrm,type:row.type,reason:row.reason,cd2:row.cd2,localExists:row.localExists,fallback:row.fallback}));
+    return rows.filter(row=>row&&/^(yes|no)$/.test(row.isStrm||'')&&/^[A-Za-z0-9_-]+$/.test(row.type||'')&&/^[A-Za-z0-9_-]+$/.test(row.reason||'')&&/^[A-Za-z0-9_-]+$/.test(row.cd2||'')&&/^(yes|no)$/.test(row.localExists||'')&&/^(yes|no)$/.test(row.fallback||'')&&/^[A-Za-z0-9_-]+$/.test(row.sourceKind||'unknown')&&/^[A-Za-z0-9_-]+$/.test(row.direct||'not_attempted')).map(row=>({isStrm:row.isStrm,type:row.type,reason:row.reason,cd2:row.cd2,localExists:row.localExists,fallback:row.fallback,sourceKind:row.sourceKind||'unknown',direct:row.direct||'not_attempted'}));
 }
 function save(){fs.writeFileSync(path.join(output,'acceptance.json'),JSON.stringify(report,null,2));}
 async function evaluate(code){return win.webContents.executeJavaScript(code);}
@@ -62,14 +62,14 @@ app.on('browser-window-created',(_,created)=>{
                     console.log=function(){
                         try{
                             var text=Array.prototype.join.call(arguments,' ');
-                            var match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)/.exec(text);
-                            if(match)window.__eteResolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6]});
+                            var match=/STRM resolver: invoked isStrm=(yes|no) type=([A-Za-z0-9_-]+) reason=([A-Za-z0-9_-]+) cd2=([A-Za-z0-9_-]+) localExists=(yes|no) fallback=(yes|no)(?: sourceKind=([A-Za-z0-9_-]+) direct=([A-Za-z0-9_-]+))?/.exec(text);
+                            if(match)window.__eteResolverMessages.push({isStrm:match[1],type:match[2],reason:match[3],cd2:match[4],localExists:match[5],fallback:match[6],sourceKind:match[7]||'unknown',direct:match[8]||'not_attempted'});
                         }catch(_){ }
                         return original.apply(console,arguments);
                     };
                 })();void 0;`);
                 await evaluate(fs.readFileSync(path.join(__dirname,'../tests/live-acceptance-browser.js'),'utf8')+'\nvoid 0;');
-                const methods=process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_SELECT_ONLY?['inspect','select']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
+                const methods=process.env.ETE_ACCEPT_INSPECT_ONLY?['inspect']:process.env.ETE_ACCEPT_SELECT_ONLY?['inspect','select']:process.env.ETE_ACCEPT_DIRECT_SMOKE?['inspect','select','directSmoke']:process.env.ETE_ACCEPT_VISUAL?['inspect','select','play','visual','stop']:['inspect','select','play','pause','seek','resume','next','stop'];
                 for(const method of methods){
                     report.currentStage=method;save();
                     const result=await evaluate('window.eteAcceptance.'+method+'()');

@@ -8,7 +8,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1
 python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv/x64/mpv-1.dll
 ```
 
-单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、空/root cloudPrefix、RPC/transport reject、deadline、Abort/cancel/late callback、URL 校验、CD2 → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount 和 persistent profile inspect 安全枚举。当前为 43/43。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包执行验证。
+单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount 和 persistent profile inspect 安全枚举。当前为 56/56。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包验证。
+
+## CloudDrive2 PR #4 DirectUrl
+
+安全门探针：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-libmpv-file-local-ua.ps1 -RuntimeName EmbyTheaterEnhanced-0.1.1-cd2-direct-url-c
+```
+
+该探针在 exact frozen Electron 18.3.15 / mpv 0.41 / Pepper bridge 上连续加载 UA-A、UA-B 与无 file-local option 的 same-origin C。三段均实际识别 Y4M 并推进；本地 HTTP 只观察到各自期望 UA，C 未携带 A/B，证明 `loadfile <url> replace -1 user-agent=<value>` 没有跨 source 泄漏。
+
+fake DirectUrl 产品链使用 `-Visible -TestPipeline -TestCd2Direct`。既有有效运行覆盖 DirectUrl source、required UA、普通媒体 same-origin/no-leak、Pause/Seek/Resume/NextTrack/Stop、generation/cancel 与 19 条模拟报告。本轮按当前源码重建的 runtime 已进入 resolver 并观察 DirectUrl 请求、UA 匹配和 no-leak，但在切换第二个 fixture source 时 UI smoke timeout；不把该次整体记为全链通过，项目继续把每次有效与失败 evidence 分开保留。
+
+真实分层 smoke 使用 persistent profile 选择两个既有 STRM 样本，但只将一个 `MediaSource.Path` 在 renderer 内交给 trusted CD2 IPC，不输出路径、URL、query、UA 或 token。结果为 `sourceKind=direct-url`、returned UA present、expiry present、path accepted、format present、core-idle=false、time-pos advancing。`ETE_CD2_DIRECT_URL=0` 的 same-origin 重试两次均停在新 embed 的 `bridge-not-ready`，未发送 loadfile；same-origin fallback 继续由 unit/fake 与 PR #2 既有真实证据支持。
+
+完整 `tools/accept-live.ps1 -AuthorizedLivePlayback` 复测多次在 `manager.play()` 45 秒界限内返回 `playback-not-started`，resolver 记录为 0；刷新率协议单独返回正常。这是 resolver 前阻塞，既不证明 DirectUrl/fallback 失败，也不构成本轮 Session/WebSocket/controls/reports 通过证据。
 
 ## CloudDrive2 PR #2
 
@@ -95,6 +111,10 @@ UI/runtime 测试必须串行执行。测试输出只保留在 `.work` 隔离目
 | 真实 CD2 只读 smoke | mapping/RPC/same-origin URL/HEAD 200/Range 206 通过；无 refresh 或设置修改 |
 | 真实 Enhanced + CD2 media | 独立 MKV core-playing、tracks、cache 与 time-pos advancing 通过 |
 | 真实 Emby + CD2 | inspect `logged-in`；两个样本均 `cd2_hit`/CD2 URL；embedded libmpv/core-playing 与 playback advancing、Session/WebSocket/Play/Pause/Seek/Resume/NextTrack/Stop、两个 Item/MediaSource/PlaySession identity 和 10 条报告全部通过 |
+| PR #4 DirectUrl unit/fake | 56/56；DirectUrl/UA/header/expiry、一次 reacquire、timeout/Abort/late、same-origin fallback 通过 |
+| PR #4 frozen file-local UA | UA-A → UA-B → same-origin C 均播放推进；NO LEAK |
+| PR #4 real DirectUrl 分层 smoke | persistent-profile 真样本返回 required UA/expiry；embedded libmpv path/format/core-playing/time advancing 通过 |
+| PR #4 real Emby 全链 | `manager.play()` 在 resolver 前 timeout；Session/WebSocket/controls/reports 未取得本轮通过证据 |
 
 后续可见测试结果及最新状态以 PROJECT_STATUS 和 DEVELOPMENT_LOG 为准。隔离 runtime 的 Mount 命中不替代真实 Emby 服务器 Mount 验收。
 

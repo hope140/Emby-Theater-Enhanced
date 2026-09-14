@@ -8,7 +8,7 @@ Emby Theater Enhanced 是非官方的社区维护项目，与 Emby 不存在隶�
 
 第一轮已建立源码、输入清单、构建脚本、Inno 安装包、播放/远控审计与容错诊断。本地测试、实际安装生命周期、真实 STRM 播放及服务器后台控制均已通过；WatchTogether 按用户确认的后台控制口径验收。普通文件库内无样本，完整结果见 [LIVE_ACCEPTANCE](docs/LIVE_ACCEPTANCE.md) 和 [PROJECT_STATUS](docs/PROJECT_STATUS.md)。
 
-当前 `feat/cd2-resolver` 候选在原 PlaybackManager/Session 链内增加 CloudDrive2 same-origin HTTP source，失败顺序为 Mount → Native，Transcode 保持 Native。自动、fake、frozen runtime、真实 CD2 只读解析和独立真实 MKV 播放已通过；真实 Emby 全链因保存登录态不可用仍待验收，不能视为已发布能力。
+当前 `feat/cd2-direct-url` 候选在原 PlaybackManager/Session 链内按 DirectUrl → CloudDrive2 same-origin HTTP → Mount → Native 选择最终 source，Transcode 保持 Native。DirectUrl 只接受受限的 file-local User-Agent；任意 `additionalHeaders` 均自动回退 same-origin。自动测试、frozen transport/file-local UA/Stop 以及 fake DirectUrl 完整链既有证据已通过；真实 CD2 DirectUrl/embedded libmpv 分层 smoke 已通过。本轮完整 PlaybackManager 实服验收在进入 resolver 前超时，尚不能视为已发布能力。安全边界见 [CD2 DirectUrl contract](docs/CD2_DIRECT_URL.md)。
 
 ## 使用本地构建
 
@@ -39,6 +39,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -RuntimeNa
 ## 后续阅读
 
 - [当前状态与接手入口](docs/PROJECT_STATUS.md)
+- [CloudDrive2 DirectUrl 安全契约](docs/CD2_DIRECT_URL.md)
 - [架构与未来 Resolver 边界](docs/ARCHITECTURE.md)
 - [播放链路](docs/PLAYBACK_PIPELINE.md) / [Session 与远控](docs/SESSION_CONTROL.md)
 - [测试](docs/TESTING.md) / [构建与安装](docs/PACKAGING.md)

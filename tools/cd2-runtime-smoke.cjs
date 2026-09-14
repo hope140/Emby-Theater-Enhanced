@@ -23,8 +23,14 @@ server.addService(api.CloudDriveFileSrv.service, {
     },
     GetDownloadUrlPath(call, callback) {
         requestShapeAccepted = requestShapeAccepted && call.request.preview === false &&
-            call.request.lazy_read === false && call.request.get_direct_url === false;
-        callback(null, {downloadUrlPath: '/static/{SCHEME}/{HOST}/{PREVIEW}/fixture'});
+            call.request.lazy_read === false && call.request.get_direct_url === true;
+        callback(null, {
+            downloadUrlPath: '/static/{SCHEME}/{HOST}/{PREVIEW}/fixture',
+            directUrl: 'https://cdn.example.test/fixture',
+            userAgent: 'ETE-Runtime-Smoke/1.0',
+            expiresIn: '60',
+            additionalHeaders: {}
+        });
     }
 });
 
@@ -43,7 +49,8 @@ server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), async (
         const nativeAddons = Object.keys(require.cache).filter(name =>
             name.startsWith(path.join(electronapp, 'node_modules')) && name.endsWith('.node')
         );
-        const result = response.status === 'hit' && response.type === 'url' && metadataAccepted &&
+        const result = response.status === 'hit' && response.type === 'url' && response.sourceKind === 'direct-url' &&
+            response.requestOptions && response.requestOptions.userAgent === 'ETE-Runtime-Smoke/1.0' && metadataAccepted &&
             requestShapeAccepted && nativeAddons.length === 0 &&
             process.versions.node === '16.13.2' && process.versions.electron === '18.3.15';
         console.log(JSON.stringify({
@@ -55,6 +62,8 @@ server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), async (
             metadataAccepted,
             requestShapeAccepted,
             sourceType: response.type || null,
+            sourceKind: response.sourceKind || null,
+            fileLocalUserAgent: !!(response.requestOptions && response.requestOptions.userAgent),
             nativeAddonCount: nativeAddons.length
         }));
         process.exitCode = result ? 0 : 1;

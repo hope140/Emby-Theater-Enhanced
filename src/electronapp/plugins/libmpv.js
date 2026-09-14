@@ -12,8 +12,22 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         var localExists = result && result.localExists === true ? 'yes' : 'no';
         var fallback = type === 'native' ? 'yes' : 'no';
         var cd2Reason = result && result.cd2Reason ? result.cd2Reason : (type === 'url' ? 'cd2_hit' : 'not_attempted');
+        var sourceKind = result && result.sourceKind ? result.sourceKind : type;
+        var directReason = result && result.directReason ? result.directReason : (sourceKind === 'direct-url' ? 'direct_url_hit' : 'not_attempted');
 
-        console.log('STRM resolver: invoked isStrm=' + isStrm + ' type=' + type + ' reason=' + reason + ' cd2=' + cd2Reason + ' localExists=' + localExists + ' fallback=' + fallback);
+        console.log('STRM resolver: invoked isStrm=' + isStrm + ' type=' + type + ' reason=' + reason + ' cd2=' + cd2Reason + ' localExists=' + localExists + ' fallback=' + fallback + ' sourceKind=' + sourceKind + ' direct=' + directReason);
+    }
+
+    function getFileLocalLoadOptions(result) {
+        var userAgent;
+
+        if (!result || result.sourceKind !== 'direct-url' || !result.requestOptions) return [];
+        userAgent = result.requestOptions.userAgent;
+        if (typeof userAgent !== 'string' || !userAgent.trim() || userAgent.length > 1024 ||
+            !/^[\x20-\x7e]+$/.test(userAgent) || /[,\\]/.test(userAgent)) {
+            return [];
+        }
+        return ['user-agent=' + userAgent];
     }
 
     function toDecimal(val) {
@@ -627,6 +641,7 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
             var nativeSource = options.url;
             var url = nativeSource;
             var resolverResult;
+            var fileLocalLoadOptions;
 
             try {
                 resolverResult = await strmResolver.resolveAsync({
@@ -658,6 +673,7 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
             if (resolverResult && typeof resolverResult.source === 'string') {
                 url = resolverResult.source;
             }
+            fileLocalLoadOptions = getFileLocalLoadOptions(resolverResult);
             logStrmResolverResult(resolverResult);
 
             assertCurrentPlayRequest(request);
@@ -769,7 +785,9 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
 
             await setProperty(Object.assign(playerOptions, audioDelay(), interlace(), createClosedCaptionTrack(mediaSource, isVideo), getMpvAudioOptions(mediaType)))
             assertCurrentPlayRequest(request);
-            await sendCommand(['loadfile', url])
+            await sendCommand(fileLocalLoadOptions.length
+                ? ['loadfile', url, 'replace', '-1'].concat(fileLocalLoadOptions)
+                : ['loadfile', url])
             assertCurrentPlayRequest(request);
 
             if (mediaSource.DefaultAudioStreamIndex && playMethod != 'Transcode') {

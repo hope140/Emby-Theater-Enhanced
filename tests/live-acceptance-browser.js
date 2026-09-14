@@ -88,12 +88,61 @@ window.eteAcceptance = (function(){
             if(items.length<2)return {ok:false,reason:'not-enough-strm-samples',scanned:result.Items.length};
             return {ok:true,scanned:result.Items.length,samples:items.map(i=>{const source=(i.MediaSources||[])[0]||{};return {id:i.Id,name:i.Name,series:i.SeriesName,type:i.Type,strm:true,itemPathKind:sourceKind(i.Path),itemPathPrefixMatch:localPrefixMatches(i.Path,window.__eteExpectedCd2LocalPrefix),sourceCount:i.MediaSources&&i.MediaSources.length,sourcePathKind:sourceKind(source.Path),sourcePathPrefixMatch:localPrefixMatches(source.Path,window.__eteExpectedCd2LocalPrefix),container:String(source.Container||'').toLowerCase()||'missing'};})};
         },
+        async directSmoke(){
+            const mediaSource=(items[0].MediaSources||[])[0]||{};
+            if(typeof mediaSource.Path!=='string'||!mediaSource.Path)return {ok:false,reason:'missing-source-path'};
+            const resolved=await window.ipc.invoke('enhanced-cd2-resolve',{requestId:'live-direct-smoke',candidates:[mediaSource.Path]});
+            if(!resolved||resolved.status!=='hit')return {ok:false,reason:resolved&&resolved.reason||'resolve-miss'};
+            const bridge=document.createElement('embed');
+            bridge.type='application/x-mpvjs';
+            bridge.style.width='64px';bridge.style.height='64px';
+            const ready=new Promise(resolve=>{
+                const timer=setTimeout(()=>resolve(false),8000);
+                bridge.addEventListener('message',function receive(event){
+                    if(event.data&&event.data.type==='ready'){clearTimeout(timer);bridge.removeEventListener('message',receive);resolve(true);}
+                });
+            });
+            document.body.appendChild(bridge);
+            if(!await ready){bridge.remove();return {ok:false,reason:'bridge-not-ready'};}
+            const state={pathAccepted:false,fileFormat:null,coreIdleFalse:false,firstTime:null,maxTime:0,timeAdvanced:false};
+            function receive(event){
+                const message=event.data||{};if(message.type!=='property_change'||!message.data)return;
+                const name=message.data.name,value=message.data.value;
+                if(name==='path'&&value===resolved.source)state.pathAccepted=true;
+                else if(!state.pathAccepted)return;
+                else if(name==='file-format'&&typeof value==='string'&&/^[A-Za-z0-9_.-]{1,40}$/.test(value))state.fileFormat=value;
+                else if(name==='core-idle'&&value===false)state.coreIdleFalse=true;
+                else if(name==='time-pos'&&typeof value==='number'){
+                    if(state.firstTime===null)state.firstTime=value;state.maxTime=Math.max(state.maxTime,value);state.timeAdvanced=state.maxTime-state.firstTime>0.1;
+                }
+            }
+            bridge.addEventListener('message',receive);
+            ['path','file-format','core-idle','time-pos'].forEach(name=>bridge.postMessage({type:'observe_property',data:name}));
+            const userAgent=resolved.requestOptions&&resolved.requestOptions.userAgent;
+            const command=resolved.sourceKind==='direct-url'&&typeof userAgent==='string'
+                ? ['loadfile',resolved.source,'replace','-1','user-agent='+userAgent]
+                : ['loadfile',resolved.source];
+            bridge.postMessage({type:'command',data:command});
+            for(let i=0;i<300&&!state.timeAdvanced;i++){
+                await wait(100);
+                if(state.pathAccepted&&i%10===0)['file-format','core-idle','time-pos'].forEach(name=>bridge.postMessage({type:'get_property_async',data:name}));
+            }
+            bridge.postMessage({type:'command',data:['stop']});
+            bridge.removeEventListener('message',receive);bridge.remove();
+            return {ok:(resolved.sourceKind==='direct-url'||resolved.sourceKind==='cd2-url')&&state.pathAccepted&&!!state.fileFormat&&state.coreIdleFalse&&state.timeAdvanced,
+                reason:state.timeAdvanced?'none':'playback-not-advancing',sourceKind:resolved.sourceKind||'unknown',
+                userAgentPresent:typeof userAgent==='string'&&userAgent.length>0,expiresInPresent:resolved.expiresAt!==undefined,
+                pathAccepted:state.pathAccepted,fileFormatPresent:!!state.fileFormat,coreIdleFalse:state.coreIdleFalse,timeAdvanced:state.timeAdvanced};
+        },
         async play(){
             authorizedPlayback=true;
             const first=items[0];
             const started=manager.play({items:items,fullscreen:true,startPositionTicks:0});
-            const done=await Promise.race([started.then(()=>true,()=>false),wait(45000).then(()=>false)]);
-            if(!done)return {ok:false,reason:'playback-not-started'};
+            const done=await Promise.race([
+                started.then(()=>({ok:true}),error=>({ok:false,errorType:error&&error.name||'Error'})),
+                wait(45000).then(()=>({ok:false,errorType:'Timeout'}))
+            ]);
+            if(!done.ok)return {ok:false,reason:'playback-not-started',errorType:done.errorType};
             const progressed=await until(()=>{const s=playerState();return s&&s.item===first.Id&&s.ticks>30000000?s:null;},30000);
             const server=await until(async()=>{const s=await ownSession();return s&&s.NowPlayingItem&&s.NowPlayingItem.Id===first.Id&&s.PlayState.PositionTicks>0?s:null;},15000);
             return {ok:!!progressed&&!!server,local:progressed,server:sanitizedSession(server),reported:reports.filter(r=>r.item===first.Id)};

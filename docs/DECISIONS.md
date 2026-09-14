@@ -16,6 +16,7 @@
 | Electron Frozen For Now | 使用实际随包 18.3.15，不依据 package.json 安装新 Electron |
 | CD2 Does Not Require Server Plugin | 后续 CD2 是客户端增强路径，服务器插件只作参考 |
 | CD2 V1 Uses Same-origin HTTP | main-process grpc-js 只请求 `get_direct_url=false`；CD2 成功后只替换 libmpv source，失败继续 Mount → Native；DirectUrl 留到独立 PR |
+| CD2 DirectUrl Is Capability-gated | PR #4 只在 URL、expiry、空 additionalHeaders 与受限 User-Agent 全部安全时使用 DirectUrl；UA 仅通过 mpv file-local loadfile option，任何不安全能力都回到 same-origin → Mount → Native |
 | CD2 Credentials Stay in Main | token、Bearer metadata、proto client 与 active calls 不进入 renderer；当前通过环境变量或 ignored local config 注入，不做设置 UI |
 | Async Playback Uses Generation | PlaybackManager request id 与 libmpv generation 共同阻止旧 Play/NextTrack/Stop 的 late response、旧 `core-playing` 和旧 error recovery |
 | CD2 Lookup Fails Fast | readiness 200ms、Find 350ms、download 300ms，共享 750ms absolute budget；V1 不 retry、refresh、预热或持久缓存 URL |

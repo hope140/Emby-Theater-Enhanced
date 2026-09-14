@@ -15,8 +15,21 @@ let fakeCd2Stats;
 if (process.env.ETE_TEST_PIPELINE) {
     const media = fs.readFileSync(process.env.ETE_TEST_MEDIA);
     const server = require('http').createServer((request,response) => {
-        mediaRequests.push({method:request.method,range:request.headers.range || null});
-        if (new URL(request.url, 'http://127.0.0.1').pathname !== '/fixture.y4m') { response.writeHead(404); return response.end(); }
+        const parsedRequest = new URL(request.url, 'http://127.0.0.1');
+        const directRequestId = parsedRequest.searchParams.get('cd2');
+        const expectedDirectUa = directRequestId ? 'ETE-Direct-' + directRequestId : null;
+        const observedUa = request.headers['user-agent'] || '';
+        const directUaMatch = expectedDirectUa ? observedUa === expectedDirectUa : null;
+        const directUaLeaked = !expectedDirectUa && observedUa.indexOf('ETE-Direct-') === 0;
+        mediaRequests.push({
+            method:request.method,
+            range:request.headers.range || null,
+            sourceKind:expectedDirectUa ? 'direct-url' : 'same-origin',
+            directUaMatch:directUaMatch,
+            directUaLeaked:directUaLeaked
+        });
+        if (parsedRequest.pathname !== '/fixture.y4m') { response.writeHead(404); return response.end(); }
+        if ((expectedDirectUa && !directUaMatch) || directUaLeaked) { response.writeHead(403); return response.end(); }
         const match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || '');
         const start = match ? Number(match[1]) : 0;
         const end = match && match[2] ? Math.min(Number(match[2]),media.length-1) : media.length-1;
@@ -36,13 +49,22 @@ let testWindow;
 function finish(result) {
     if (completed) return;
     completed = true;
-    result.cd2EnvironmentCleared = ['ETE_CD2_ENABLED','ETE_CD2_ORIGIN','ETE_CD2_TOKEN','ETE_CD2_LOCAL_PREFIX','ETE_CD2_CLOUD_PREFIX']
+    result.cd2EnvironmentCleared = ['ETE_CD2_ENABLED','ETE_CD2_ORIGIN','ETE_CD2_TOKEN','ETE_CD2_LOCAL_PREFIX','ETE_CD2_CLOUD_PREFIX','ETE_CD2_DIRECT_URL']
         .every(name => process.env[name] === undefined);
     if (!result.cd2EnvironmentCleared) result.ok = false;
     result.mediaRequestSummary = {
         count: mediaRequests.length,
-        rangeCount: mediaRequests.filter(request => request.range).length
+        rangeCount: mediaRequests.filter(request => request.range).length,
+        directCount: mediaRequests.filter(request => request.sourceKind === 'direct-url').length
     };
+    if (process.env.ETE_TEST_CD2_MODE === 'direct') {
+        result.directHeaderIsolation = {
+            directRequestsObserved: mediaRequests.some(request => request.sourceKind === 'direct-url'),
+            allDirectUserAgentsMatched: mediaRequests.filter(request => request.sourceKind === 'direct-url').every(request => request.directUaMatch === true),
+            noDirectUserAgentLeak: mediaRequests.filter(request => request.sourceKind === 'same-origin').every(request => request.directUaLeaked === false)
+        };
+        if (!Object.values(result.directHeaderIsolation).every(Boolean)) result.ok = false;
+    }
     result.resolverEvents = resolverEvents;
     if (fakeCd2Stats) {
         result.cd2Fake = {
@@ -104,7 +126,7 @@ app.on('browser-window-created', (_, win) => {
                     }
                     if (!Object.values(state.pipeline.next).every(Boolean) || !state.pipeline.results.every(result => result.playerId==='libmpvmediaplayer' && Object.entries(result).filter(([k])=>!['kind','playerId'].includes(k)).every(([,v])=>v===true)) ||
                         (state.pipeline.generation && !Object.values(state.pipeline.generation).every(Boolean)) ||
-                        (process.env.ETE_TEST_CD2_MODE === 'hit' && fakeCd2Stats.cancelCount < 2)) {
+                        ((process.env.ETE_TEST_CD2_MODE === 'hit' || process.env.ETE_TEST_CD2_MODE === 'direct') && fakeCd2Stats.cancelCount < 2)) {
                         return finish({ok:false,error:'Playback pipeline assertion failed',state});
                     }
                 } else if (process.env.ETE_TEST_MEDIA) {
@@ -188,6 +210,12 @@ if (process.env.ETE_TEST_CD2_MODE) {
                         fakeCd2Stats.completedCount++;
                         if (process.env.ETE_TEST_CD2_MODE === 'hit') {
                             resolve({status:'hit',type:'url',source:fixtureUrl+'?cd2='+encodeURIComponent(request.requestId)});
+                        } else if (process.env.ETE_TEST_CD2_MODE === 'direct') {
+                            resolve({
+                                status:'hit',type:'url',sourceKind:'direct-url',reason:'direct_hit',
+                                source:fixtureUrl+'?cd2='+encodeURIComponent(request.requestId),
+                                requestOptions:{userAgent:'ETE-Direct-'+request.requestId}
+                            });
                         } else {
                             resolve({status:'miss',reason:'unavailable'});
                         }

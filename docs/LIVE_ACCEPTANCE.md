@@ -41,3 +41,15 @@
 在当前工作区生成的隔离 runtime 上执行真实验收，选择两个 POSIX STRM 样本。只读 mapping 诊断确认两个样本共享一条稳定 single-prefix mapping，relative suffix 保持，边界/`..`/POSIX case sensitivity 通过，两个 CD2 target 均为 regular file，HEAD 200、Range 206 且无重定向。真实 Session 可见、账号为非管理员、WebSocket 在线、远控能力有效；两个样本均 `cd2_hit`，source kind 为 CD2 URL，embedded libmpv/core-playing 与 playback advancing、Play、Pause、Seek、Resume、NextTrack、Stop 全部通过，10 条播放报告全部被服务器接受。
 
 实际 mapping 只存在于 ignored local acceptance 配置，没有写入源码、文档、fixture、acceptance report 或 Git。验收不使用 `Item.Path` 替代 `MediaSource.Path`，也没有自动学习、扫描或修改服务器/CD2 配置；原始证据只保存在本地 ignored work directory。
+
+## 2026-09-14 — PR #4 DirectUrl 分层验收
+
+复用同一 persistent profile 与已有 ignored mapping，不修改服务器或 CloudDrive2。安全模式在 renderer 内选取既有 STRM 的真实 `MediaSource.Path` 并调用 trusted CD2 IPC；输出只保留字段存在性和状态枚举。结果为 `sourceKind=direct-url`、returned User-Agent present、expiresIn present。随后 exact embedded libmpv 以 file-local `loadfile` option 打开该 DirectUrl，观察到 path accepted、format present、core-idle=false 与 time-pos advancing；未把 URL、query、UA、token、媒体名或路径写入公开 evidence。
+
+完整 PlaybackManager → Session/WebSocket/controls/reports 复测多次在 `manager.play()` 45 秒内未完成，且 resolver 记录为 0，证明阻塞发生在本轮 source resolution 之前。刷新率协议独立 probe 正常；未修改产品播放链来绕过该阻塞。`ETE_CD2_DIRECT_URL=0` 的真实 same-origin 分层重试两次停在新 embed `bridge-not-ready`，没有发 loadfile。PR #2 的两个真实 same-origin 样本与全控制链证据仍有效，但不能替代 PR #4 的完整实服验收，因此本轮结论为 DirectUrl acquisition/libmpv PASS、完整真实 Emby acceptance 未通过。
+
+## 2026-09-14 — PR #4 收尾复核
+
+按当前源码重建独立 verification runtime 后，frozen DirectUrl fixture 进入 resolver 并观察到 DirectUrl 请求、required UA 与 no-leak；整体 fixture 在切换第二个 source 时发生 UI readiness timeout，因此不新增完整 controls/generation 通过结论。exact Pepper file-local UA 探针与 Stop-before-player 仍通过。
+
+使用已有 persistent profile 和 ignored mapping 做一次有界真实 DirectSmoke，inspect/select 通过，但 resolver 阶段返回 timeout，未创建 bridge、未发起媒体请求；此结果记录为 acceptance/runtime 前置阻塞，不作为 DirectUrl 或 fallback 失败。前一条已保存的真实 DirectUrl 分层成功证据仍是本轮 product path 的 PASS 依据，完整 PlaybackManager/Session/WebSocket/controls/reports 继续保持未通过。

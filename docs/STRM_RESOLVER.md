@@ -1,6 +1,6 @@
 # STRM Playback Source Resolver
 
-Resolver 运行在现有 `PlaybackManager → libmpv` 播放链内，只决定 Embedded libmpv 最终加载的 source，不创建播放器、Session 或 PlaySession。当前优先级为 CloudDrive2 same-origin HTTP → Mount → Native；DirectUrl 不在本阶段。
+Resolver 运行在现有 `PlaybackManager → libmpv` 播放链内，只决定 Embedded libmpv 最终加载的 source，不创建播放器、Session 或 PlaySession。当前优先级为 safe CloudDrive2 DirectUrl → CloudDrive2 same-origin HTTP → Mount → Native。
 
 ## Detection
 
@@ -38,15 +38,15 @@ Resolver 使用三个严格分离的路径字段。
 }
 ```
 
-`type: 'url'` 只表示已经由 main process 校验的 CD2 same-origin HTTP(S) source。CD2 resolver 不控制播放器，也不改变输入 context。
+`type: 'url'` 表示已经由 main process 校验的 DirectUrl 或 CD2 same-origin HTTP(S) source；`sourceKind` 区分 `direct-url` 与 `cd2-url`。只有 DirectUrl 可以携带受限的 `requestOptions.userAgent`，并由 libmpv 作为 file-local `loadfile` option 传递。CD2 resolver 不控制播放器，也不改变输入 context。
 
 ## CloudDrive2 rules
 
 1. 复用 Mount Resolver 的确定性媒体候选，不扫描目录、不解析 provider opaque id。
 2. main process 读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX`；token 不进入 renderer、诊断或日志。
 3. V1 仅支持一条 local prefix → POSIX cloud prefix mapping；drive/UNC 大小写不敏感，absolute POSIX 大小写敏感，均严格检查路径边界并拒绝 `..`。absolute POSIX `MediaSource.Path` 带 allowlisted 媒体后缀时是确定性 CD2 candidate；在 Windows client 上它不会进入 `existsSync` Mount 检查，只能由 CD2 命中，否则继续 native fallback。
-4. 只调用 `FindFileByPath` 和 `GetDownloadUrlPath(preview=false, lazy_read=false, get_direct_url=false)`；只接受 regular file、完整 placeholder、HTTP(S) 与相同 scheme/host/port。
-5. foreign host/port、DirectUrl、externalUrl、未知 scheme、空/目录/异常响应和 RPC failure 全部视为 CD2 miss，再走 Mount → Native。
+4. 先调用 `GetDownloadUrlPath(... get_direct_url=true)`；只有安全 HTTP(S) DirectUrl、空 additionalHeaders、受限可打印 ASCII User-Agent 与有效 expiry 才可直连。任意 additionalHeaders、控制字符、逗号/反斜杠 UA、无效/近过期 URL 均优先 same-origin。
+5. DirectUrl miss/unsupported/transport failure 后复用同次响应或调用 `get_direct_url=false` 取得同源 URL，再走 Mount → Native；全部阶段共享 750ms absolute budget。Abort/superseded 不进入 fallback。
 
 ## Mount rules
 
@@ -76,4 +76,4 @@ URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、
 
 ## Known limitations
 
-当前 unit/fake/frozen Electron 已覆盖 CD2 hit、transport reject → Mount/Native、CD2 miss → Mount/Native、POSIX candidate 不进入 Windows Mount、Transcode、timeout、Abort、cancel、late callback、双 NextTrack、libmpv Stop、PlaybackManager Stop-before-player.play 和旧 `core-playing` listener；PlaybackManager fixture 中 Item/MediaSource/PlaySessionId、控制与报告保持。独立真实 CD2 MKV 已观察 `core-playing`、`core-idle=false`、track list、cache state 与 time-pos 推进。2026-09-14 两个真实 Emby POSIX STRM 样本在同一条 ignored source-side mapping 下均返回 `cd2_hit`，source kind 为 CD2 URL，embedded libmpv/core-playing、Session/WebSocket/controls/reports 全部通过。DirectUrl、refresh、retry、多 mapping 与设置 UI 留待后续。
+当前 unit/fake/frozen Electron 已覆盖 DirectUrl + file-local UA、unsafe UA/header → same-origin、known-expiry bounded reacquire、transport reject/timeout → same-origin、CD2 miss → Mount/Native、POSIX candidate 不进入 Windows Mount、Transcode、Abort、cancel、late callback、双 NextTrack、libmpv Stop、PlaybackManager Stop-before-player.play 和旧 `core-playing` listener。真实 DirectUrl 分层 smoke 已证明 returned UA 与 expiry 存在，embedded libmpv 使用 file-local UA 后 path/format/core-playing/time advancing。本轮完整 PlaybackManager 实服复测在 resolver 前超时；HTTP-error-triggered refresh、任意 additionalHeaders、多 mapping 与设置 UI 留待后续。
