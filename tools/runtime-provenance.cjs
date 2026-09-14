@@ -8,11 +8,19 @@ const OVERLAY_RUNTIME_PATH = 'electronapp/www/modules/common/playback/playbackma
 const OVERLAY_GENERATOR_PATH = 'tools/patch-playbackmanager.cjs';
 const PACKAGE_RUNTIME_PATH = 'electronapp/package.json';
 const PACKAGE_GENERATOR_PATH = 'tools/build.ps1';
+const APP_RUNTIME_PATH = 'electronapp/www/app.js';
+const APP_SOURCE_PATH = 'src/electronapp/www/app.js';
+const APP_GENERATOR_PATH = 'tools/patch-external-player-registration.cjs';
 const START_WRAPPERS = ['tools/Start-Enhanced.ps1', 'tools/Start-Enhanced.cmd'];
-const OVERLAY_GENERATORS = new Map([
-    [OVERLAY_RUNTIME_PATH, OVERLAY_GENERATOR_PATH],
-    [PACKAGE_RUNTIME_PATH, PACKAGE_GENERATOR_PATH]
+const EXCLUDED_SOURCE_PREFIXES = Object.freeze([
+    'src/electronapp/www/modules/externalplayer/'
 ]);
+const RUNTIME_OVERLAY_CONTRACT = Object.freeze([
+    {runtimePath: APP_RUNTIME_PATH, sourcePath: APP_SOURCE_PATH, generatorPath: APP_GENERATOR_PATH},
+    {runtimePath: OVERLAY_RUNTIME_PATH, sourcePath: 'src/electronapp/www/modules/common/playback/playbackmanager.js', generatorPath: OVERLAY_GENERATOR_PATH},
+    {runtimePath: PACKAGE_RUNTIME_PATH, sourcePath: 'src/electronapp/package.json', generatorPath: PACKAGE_GENERATOR_PATH}
+]);
+const OVERLAY_GENERATORS = new Map(RUNTIME_OVERLAY_CONTRACT.map(entry => [entry.runtimePath, entry.generatorPath]));
 
 function usage() {
     throw new Error('Usage: runtime-provenance.cjs <write|validate> <root> <runtime> <sourceCommit>');
@@ -43,16 +51,44 @@ function walkFiles(root) {
 
 function slash(value) { return value.split(path.sep).join('/'); }
 
+function isExcludedSourcePath(sourcePath) {
+    return EXCLUDED_SOURCE_PREFIXES.some(prefix => sourcePath.startsWith(prefix));
+}
+
+function sameStringArray(actual, expected) {
+    return Array.isArray(actual) && actual.length === expected.length &&
+        actual.every((value, index) => value === expected[index]);
+}
+
+function buildOverlayEntries(root, runtime) {
+    return RUNTIME_OVERLAY_CONTRACT.map(contract => {
+        const sourceFile = path.join(root, contract.sourcePath);
+        const runtimeFile = path.join(runtime, contract.runtimePath);
+        const generatorFile = path.join(root, contract.generatorPath);
+        if (!exists(runtimeFile)) throw new Error('Provenance runtime overlay missing: ' + contract.runtimePath);
+        if (!exists(generatorFile)) throw new Error('Provenance overlay generator missing: ' + contract.generatorPath);
+        const sourcePresent = exists(sourceFile);
+        return Object.assign({}, contract, {
+            sourcePresent,
+            sourceSha256: sourcePresent ? hashFile(sourceFile) : null,
+            generatorSha256: hashFile(generatorFile),
+            runtimeSha256: hashFile(runtimeFile)
+        });
+    });
+}
+
 function sourceEntries(root) {
     const sourceRoot = path.join(root, 'src', 'electronapp');
     const entries = walkFiles(sourceRoot).map(file => {
         const relative = slash(path.relative(sourceRoot, file));
+        const sourcePath = 'src/electronapp/' + relative;
+        if (isExcludedSourcePath(sourcePath)) return null;
         return {
-            sourcePath: 'src/electronapp/' + relative,
+            sourcePath,
             runtimePath: 'electronapp/' + relative,
             relation: 'copied'
         };
-    });
+    }).filter(Boolean);
     for (const wrapper of START_WRAPPERS) {
         entries.push({sourcePath: wrapper, runtimePath: slash(path.basename(wrapper)), relation: 'copied'});
     }
@@ -82,6 +118,7 @@ function baselineIdentity(root) {
 function writeManifest(root, runtime, sourceCommit) {
     if (!/^[0-9a-fA-F]{40}$/.test(sourceCommit || '')) throw new Error('sourceCommit must be a 40-character git commit.');
     const entries = sourceEntries(root);
+    const buildOverlays = buildOverlayEntries(root, runtime);
     const files = entries.map(entry => {
         const sourceFile = path.join(root, entry.sourcePath);
         const runtimeFile = path.join(runtime, entry.runtimePath);
@@ -102,10 +139,12 @@ function writeManifest(root, runtime, sourceCommit) {
             runtimeRoot: 'electronapp',
             includesIgnoredSourceFiles: true,
             includesStartWrappers: true,
-            description: 'All repo-owned src/electronapp files plus Start-Enhanced wrappers; package metadata and PlaybackManager are recorded as explicit build overlays',
+            excludedSourcePrefixes: [...EXCLUDED_SOURCE_PREFIXES],
+            description: 'All non-excluded repo-owned src/electronapp files plus Start-Enhanced wrappers; package metadata and PlaybackManager are recorded as explicit build overlays',
             fileCount: files.length,
             files
         },
+        buildOverlays,
         exclusions: ['vendor baseline payload', 'node_modules production closure', 'Electron runtime binaries', 'native mpv binary']
     };
     fs.writeFileSync(path.join(runtime, 'runtime-provenance.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
@@ -120,12 +159,56 @@ function failedValidation(runtime, sourceCommit, errors, files, manifest) {
         runtimeName: path.basename(runtime),
         manifest: 'runtime-provenance.json',
         baselineIdentity: manifest && manifest.baselineIdentity || null,
+        buildOverlays: manifest && Array.isArray(manifest.buildOverlays) ? manifest.buildOverlays : [],
         validatedProductScope: manifest && manifest.validatedProductScope
-            ? {sourceRoot: manifest.validatedProductScope.sourceRoot, runtimeRoot: manifest.validatedProductScope.runtimeRoot, fileCount: manifest.validatedProductScope.fileCount}
+            ? {
+                sourceRoot: manifest.validatedProductScope.sourceRoot,
+                runtimeRoot: manifest.validatedProductScope.runtimeRoot,
+                excludedSourcePrefixes: Array.isArray(manifest.validatedProductScope.excludedSourcePrefixes)
+                    ? manifest.validatedProductScope.excludedSourcePrefixes : [],
+                fileCount: manifest.validatedProductScope.fileCount
+            }
             : null,
         files: files || [],
         errors
     };
+}
+
+function validateBuildOverlays(root, runtime, manifest, errors) {
+    let expected;
+    try {
+        expected = buildOverlayEntries(root, runtime);
+    } catch (error) {
+        errors.push('build-overlay-input-missing');
+        return [];
+    }
+    const actual = manifest && Array.isArray(manifest.buildOverlays) ? manifest.buildOverlays : [];
+    if (actual.length !== expected.length) errors.push('build-overlay-contract-mismatch');
+    const checks = expected.map((expectedEntry, index) => {
+        const entry = actual[index] || {};
+        const contractMatch = entry.runtimePath === expectedEntry.runtimePath &&
+            entry.sourcePath === expectedEntry.sourcePath &&
+            entry.generatorPath === expectedEntry.generatorPath;
+        const sourcePresenceMatch = entry.sourcePresent === expectedEntry.sourcePresent;
+        const sourceMatch = entry.sourceSha256 === expectedEntry.sourceSha256;
+        const generatorMatch = entry.generatorSha256 === expectedEntry.generatorSha256;
+        const runtimeMatch = entry.runtimeSha256 === expectedEntry.runtimeSha256;
+        const valid = contractMatch && sourcePresenceMatch && sourceMatch && generatorMatch && runtimeMatch;
+        if (!contractMatch) errors.push('build-overlay-contract-mismatch:' + expectedEntry.runtimePath);
+        if (!sourcePresenceMatch) errors.push('build-overlay-source-presence-mismatch:' + expectedEntry.sourcePath);
+        if (!sourceMatch) errors.push('build-overlay-source-hash-mismatch:' + expectedEntry.sourcePath);
+        if (!generatorMatch) errors.push('build-overlay-generator-mismatch:' + expectedEntry.generatorPath);
+        if (!runtimeMatch) errors.push('build-overlay-runtime-hash-mismatch:' + expectedEntry.runtimePath);
+        return Object.assign({}, entry, {
+            contractMatch,
+            sourcePresenceMatch,
+            sourceMatch,
+            generatorMatch,
+            runtimeMatch,
+            valid
+        });
+    });
+    return checks;
 }
 
 function validateManifest(root, runtime, sourceCommit) {
@@ -149,6 +232,10 @@ function validateManifest(root, runtime, sourceCommit) {
     if (!scope || scope.sourceRoot !== 'src/electronapp' || scope.runtimeRoot !== 'electronapp' || scope.includesIgnoredSourceFiles !== true || !Array.isArray(scope.files)) {
         return failedValidation(runtime, sourceCommit, errors.concat('validated-product-scope-missing'), [], manifest);
     }
+    if (!sameStringArray(scope.excludedSourcePrefixes, EXCLUDED_SOURCE_PREFIXES)) {
+        errors.push('source-exclusion-contract-mismatch');
+    }
+    const buildOverlays = validateBuildOverlays(root, runtime, manifest, errors);
     const expected = sourceEntries(root);
     const bySource = new Map(scope.files.map(entry => [entry.sourcePath, entry]));
     const expectedSources = new Set(expected.map(entry => entry.sourcePath));
@@ -218,9 +305,11 @@ function validateManifest(root, runtime, sourceCommit) {
             sourceRoot: scope.sourceRoot,
             runtimeRoot: scope.runtimeRoot,
             includesIgnoredSourceFiles: scope.includesIgnoredSourceFiles === true,
+            excludedSourcePrefixes: Array.isArray(scope.excludedSourcePrefixes) ? scope.excludedSourcePrefixes : [],
             fileCount: scope.fileCount,
             currentFileCount: expected.length
         },
+        buildOverlays,
         files: checks,
         errors
     };

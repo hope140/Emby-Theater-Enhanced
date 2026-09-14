@@ -1,5 +1,54 @@
 # 开发日志
 
+## 2026-09-14 — External Player registration portability fix
+
+Batch 1 review 的最后 blocker 是 Electron External Player registration 只存在于 ignored Web snapshot 的本机修改。本轮新增 `tools/patch-external-player-registration.cjs`，以精确 registration pattern 做可重复、幂等且 fail-closed 的 patch；`tools/build.ps1` 在 source overlay 后执行它，再移除 `electronapp/www/modules/externalplayer`。Android `native/android/externalplayer` 和其它平台分支保持不变。
+
+`runtime-provenance.cjs` 将 `electronapp/www/app.js` 登记为受控 overlay，记录 generator/runtime/source 状态；source app.js 存在时验证 source/runtime/generator hash，source app.js 缺失时验证 vendor fallback runtime overlay，且不降低其它产品 scope。新增 active/already-clean/platform-preservation/malformed-duplicate patch tests，以及 source sentinel/external-player exclusion 和 normal missing-runtime failure regression。未修改播放代码、Session、main IPC、shell、CEC、vendor 或用户数据，未重新执行真实 acceptance。
+
+Model Tier: 1
+Model: current Codex session
+Reason: the change is a narrow tracked build/provenance contract with targeted fixtures; playback and Session behavior remain out of scope
+Escalated: no
+
+## 2026-09-14 — Provenance portability blocker fix
+
+Batch 1 review 发现 External Player frontend 位于 ignored `src/electronapp/www/`，本机删除 41 个文件不会同步到其它构建机；若 provenance 继续枚举它们，而 build runtime 已排除目录，另一台机器会构建失败。本轮只修该 contract：`runtime-provenance.cjs` 以精确 `src/electronapp/www/modules/externalplayer/` 前缀做 intentional source exclusion，并在 `validatedProductScope.excludedSourcePrefixes` 中记录；同时将 `electronapp/www/app.js` 登记为由 `patch-external-player-registration.cjs` 控制的 build overlay，只关闭 Electron registration。write/validate 共用同一 exclusion/overlay contract，其他非排除 source file 的缺失仍 fail。
+
+Local audit workspace：本机曾删除 41 个 ignored snapshot files。Durable repository/product behavior：provenance contract 与 `tools/build.ps1` exclusion 保证该 frontend 不进入 fresh Enhanced runtime，无论 ignored snapshot 是否存在。新增 targeted provenance regression，未修改播放代码、Session、main IPC、shell、CEC、vendor 或用户数据；未重新执行真实 acceptance。
+
+## 2026-09-14 — External Player frontend cleanup Batch 1
+
+从 Audit commit `fb434e57f2cca065c784e0551c651ef57d1a2634` 创建 `cleanup/external-player-frontend`，提交 `adc8758902a580cc3bc7fc33bfb10a6b422c828d`，消息为 `cleanup: remove dead external player frontend`。本轮按 contract 只清理前端/plugin 表层：物理删除本地 ignored Web snapshot 中 `www/modules/externalplayer/**` 的 41 个文件；在 `tools/build.ps1` 增加纯 External Player runtime exclusion，避免 vendor 全量复制把它重新带入新 runtime；删除直接读取该 plugin 文件的 obsolete 单测。持久化仓库行为是 exclusion，不是 41 个 tracked file deletion。没有修改 main.js、mpvPosEvent、named pipe、shell、shell.openUrl、CEC、Pepper/PPAPI、libmpv、PlaybackManager、remoteplayer、Session、resolver、CD2、DirectUrl、Mount、preload、external/、vendor helper 或用户设置。
+
+删除前重新追踪了 registration、AMD require、route/controller、自引用和 package copy rule。删除后剩余 `externalplayer` 命中逐项归类为 Android 平台分支、Batch 2 settings/autoplay/PlaybackManager guard、负向 smoke 断言或合法 build exclusion，没有失效的 `www/modules/externalplayer` runtime path。vendor/carnival 原件仍保留 41 个文件且未修改。
+
+验证 runtime 为 `dist/EmbyTheaterEnhanced-0.1.1-batch1-after-cleanup-adc8758`：provenance PASS（779 scope entries）、payload verify PASS（2,116 files）、删除路径 0 entries；npm test 56/56，451 个 JS syntax、11 个 PowerShell syntax、git diff --check 全部通过。对照 runtime 2,158 files / 389,112,766 bytes，清理后 2,117 files / 389,008,884 bytes，减少 41 files / 103,882 bytes；本地 source size 减少 77,725 bytes。
+
+唯一一次 bounded real acceptance 使用 `inspect,select,play,pause,seek,resume,stop`，全部 PASS，`strm=true`，Pepper-ready/resolver-result/manager-play-resolved 均 observed，Session/reporting 正常，runner completed、cleanup verified-clean、residual=0。`loadfileObservation=unavailable` 保持既有 observability gap，不作为本轮 gate。
+
+准确状态：External Player frontend/plugin layer removed；main-process/helper residue remains for Batch 2 audit/removal。未 push、未 merge、未开始 Batch 2。
+
+Model Tier: 1
+Model: current Codex session
+Reason: the requested deletion was narrow and the cross-module contract was fixed; only frontend payload/build exclusion and an obsolete direct-load test were in scope
+Escalated: no
+
+## 2026-09-14 — Foundation legacy audit
+
+本轮按任务书在 `main@c873913ea1a2716e048e785fa2fd83294dd091b5` 上执行 Foundation Cleanup / Legacy Audit。范围限定为审计、分类和可执行清单，不删除产品代码、不修改播放架构、不运行 Carnival 或综合补丁安装/恢复脚本、不执行真实 Emby acceptance、不提交或推送。
+
+静态追踪确认：维护版 `www/app.js` 已以 `responses.electron && false` 禁止 External Player 默认注册，disabled plugin 构造函数返回空路由/不可播放；其 41 个 module/controller/HTML/locale 文件仍随全量 vendor copy 进入 runtime。旧 `mpvPosEvent`/`mpv-socket` producer 只有该不可达 plugin consumer；`shell.js` 的 `openUrl` 仍有四类活动调用者，只有 process-only `exec/canExec/close` 可作为拆分候选。CEC 由顶层 plugin 动态加载并通过 `electroncec` 初始化，判为 KEEP。动态 plugin、opaque managed host、CEC executable 参数、用户 settings/autoplay、Anime4K preset、CEC driver/alias 和平台分支按证据不足或共享风险列为 UNKNOWN/DEFER。
+
+新增 `docs/LEGACY_AUDIT.md`，记录 8 个任务领域、依赖链、KEEP/DELETE CANDIDATE/DEFER/UNKNOWN、三个 cleanup batch、payload 统计和 Batch 1 回归条件。统计包括 External Player 41 文件约 77KB、CEC 15 文件约 1.47MB、`external/` 46 文件约 29.34MB、旧 root BAT 约 13.9KB；vendor 原件和 ignored runtime 均保持只读。
+
+验证：`npm test` 57/57；本轮未运行安装器、真实播放或远控验收。产品代码 modified：NO。
+
+Model Tier: 1
+Model: current Codex session
+Reason: task contract was audit-only; implementation scope was limited to documentation and static cross-module evidence
+Escalated: no
+
 ## 2026-09-14 — Pepper ready listener race follow-up
 
 本轮在 `fix/pepper-ready-listener-race` 上执行，基于 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`。上一轮诊断 harness/doc 资产已先独立保留为 `ef34827378805e7a80ea0f73e1f5bbf2ddbf9314`；本轮不混入临时 instrumentation。

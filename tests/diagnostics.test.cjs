@@ -1,8 +1,6 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const vm = require('node:vm');
-const fs = require('node:fs');
 const diagnostics = require('../src/electronapp/enhanced/diagnostics');
 
 class Target {
@@ -89,15 +87,4 @@ test('diagnostic output omits paths, credentials and unlisted fields; sanitizer 
     assert.doesNotMatch(JSON.stringify(result), /private|secret|token/);
     assert.equal(result.properties['glsl-shaders'].count, 1);
     assert.deepEqual(diagnostics.sanitize(result), result);
-});
-test('legacy external player cannot select media, expose settings, or spawn with persisted settings', async () => {
-    let Constructor;
-    vm.runInNewContext(fs.readFileSync('src/electronapp/www/modules/externalplayer/plugin.js','utf8'), {
-        define(deps, factory) { Constructor = factory(null,null,{get() {throw Error('old settings accessed');}},null,{exec() {throw Error('spawn');}}); }, Promise, Error
-    });
-    const player = new Constructor();
-    assert.equal(player.canPlayMediaType('Video'), false);
-    assert.equal(player.canPlayItem({}), false);
-    assert.equal(player.getRoutes().length, 0);
-    await assert.rejects(player.play({}), /disabled/);
 });

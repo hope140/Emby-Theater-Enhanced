@@ -1,5 +1,33 @@
 # 项目状态
 
+## 2026-09-14 — External Player registration portability fix
+
+在 `cleanup/external-player-frontend` 上补齐 Batch 1 最后一个 portability blocker。新增 tracked `tools/patch-external-player-registration.cjs`，只处理 Electron 的 `responses.electron && list.push("modules/externalplayer/plugin")`；`tools/build.ps1` 在 source overlay 后执行 patch，再排除 External Player frontend directory。Android/其它平台分支不受影响，already-clean 状态幂等，重复/未知变体 fail closed。
+
+`tools/runtime-provenance.cjs` 将 `electronapp/www/app.js` 纳入受控 build overlay，记录并校验 source/runtime/generator hash；source app.js 缺失时安全使用 vendor fallback，scope 不粗暴排除 app.js。新增 app-registration 与 provenance fallback 回归。未修改播放、Session、main IPC、shell、CEC、vendor 或用户数据；未重新执行真实 acceptance。
+
+## 2026-09-14 — Provenance portability blocker fix
+
+Batch 1 review 发现 External Player frontend 位于 ignored `src/electronapp/www/`，本机物理删除不具备 Git portability。当前修复在 `tools/runtime-provenance.cjs` 中加入精确 `src/electronapp/www/modules/externalplayer/` intentional source exclusion，并写入 `validatedProductScope.excludedSourcePrefixes`；同时将 `electronapp/www/app.js` 纳入 tracked build-time registration overlay，由 `tools/patch-external-player-registration.cjs` 只关闭 Electron registration。source subtree/app.js 存在或不存在时均可生成受控 provenance，普通 source file 缺 runtime 仍然失败。新增 targeted regression 与 sentinel portability 验证覆盖该边界。
+
+Local audit workspace：41 个 ignored snapshot files 曾在本机删除。Durable repository/product behavior：provenance contract 和 `tools/build.ps1` runtime exclusion 保证 fresh Enhanced runtime 不包含该 frontend，不依赖本机 ignored snapshot 状态。未修改播放、Session、main IPC、shell、CEC 或用户数据，未重新执行真实 acceptance。
+
+## 2026-09-14 — External Player frontend cleanup Batch 1
+
+基于 Audit commit `fb434e57f2cca065c784e0551c651ef57d1a2634` 创建分支 `cleanup/external-player-frontend`，完成 cleanup commit `adc8758902a580cc3bc7fc33bfb10a6b422c828d`。本轮只移除 External Player frontend/plugin layer：本地 ignored Web snapshot 的 41 个文件已物理删除，`tools/build.ps1` 增加纯 frontend runtime exclusion，并移除直接读取已删除 plugin 的 obsolete 单测。vendor 原件、main IPC、shell、CEC、external helper、PlaybackManager、Session、libmpv、resolver、CD2、DirectUrl、Mount、preload 和用户数据均未修改。持久化到仓库的行为是精确 runtime exclusion，而不是 41 个 tracked file deletion。
+
+新 runtime `dist/EmbyTheaterEnhanced-0.1.1-batch1-after-cleanup-adc8758` provenance 通过，删除路径 0 entries，`package.ps1 -VerifyOnly` 通过（2,116 payload files）。对照 runtime 为 2,158 files / 389,112,766 bytes，清理后为 2,117 files / 389,008,884 bytes，净减少 41 files / 103,882 bytes；本地 source 删除 77,725 bytes。`npm test` 56/56、451 个 JS syntax、11 个 PowerShell syntax 和 `git diff --check` 均通过。
+
+唯一一次 bounded real acceptance 的 `inspect/select/play/pause/seek/resume/stop` 全部通过；`strm=true`、Pepper-ready、resolver-result、manager-play-resolved 均观察到，Session/reporting 正常，runner completed、cleanup verified-clean、residual=0。`loadfileObservation=unavailable` 仍为 observability gap。External Player frontend/plugin layer 已标记 REMOVED；`mpvPosEvent`、named pipe、main-process external-player IPC、shell external-process branch、`external/` 和 vendor helper 明确保留到后续 Batch 2/3。
+
+## 2026-09-14 — Legacy cleanup audit
+
+基于当前 `main@c873913ea1a2716e048e785fa2fd83294dd091b5` 完成 Foundation Cleanup / Legacy Audit。本轮只做静态引用追踪、分类和 packaging inventory，没有修改 `src/` 产品行为、PlaybackManager、Session、libmpv、resolver、CD2、CEC 或用户数据，没有删除代码、运行 Carnival/补丁脚本、执行真实 Emby 播放、提交或推送。
+
+新增 `docs/LEGACY_AUDIT.md`，覆盖 External Player、shell/exec、CEC、旧 IPC/named pipe、settings/routes、打包残留和平台兼容代码。结论为：External Player 41 文件及其旧 mpv pipe 具备高置信度删除候选条件；shared `shell.openUrl`、CEC、preload generic IPC 和 Foundation 播放/Session 链必须保留；Pepper/PPAPI/Electron 18、平台分支、CEC driver/alias、Anime4K preset 和 settings/autoplay 语义继续 DEFER/UNKNOWN。当前推荐进入 Cleanup Batch 1 规划，尚未执行 cleanup PR。
+
+本轮静态证据包含 vendor manifest/build/installer 全量复制关系、当前 ignored Web snapshot 和实际 runtime payload 统计。验证：`npm test` 57/57；未执行真实 acceptance 或安装验收。产品代码 modified：NO。
+
 ## 2026-09-14 — Pepper ready listener race follow-up
 
 分支 `fix/pepper-ready-listener-race` 基于 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`，上一轮诊断 harness/doc 资产已由 `ef34827378805e7a80ea0f73e1f5bbf2ddbf9314` 独立保留。本轮产品修复 commit 为 `731dc2ad5ca4898475a5e641b6975563f9cf8c74`，仅将 authoritative window `ready` listener 和 `libmpv=embed` 初始化移到 DOM attach 前，并新增行为型同步 ready 回归。新 runtime provenance 通过；一次真实 acceptance 的 inspect/select/isStrm/Pepper-ready/resolver-result/manager-resolved/cleanup 全部通过。历史 readiness 根因仍未确认，本修复只处理静态 listener-after-attach 风险；未 push、未 merge。
