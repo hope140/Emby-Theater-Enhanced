@@ -1,5 +1,19 @@
 # 开发日志
 
+## 2026-09-15 — Clean-room / readiness foundation hardening
+
+Model Tier：2。Reason：跨 prepare/build/provenance 与 embedded Pepper readiness observer、真实 Session/playback evidence 的边界审计；产品播放代码保持冻结。
+
+基线 `main@56b2227324811b525cd73caed61e3399cd2875e5` 在独立 fresh worktree 中先按 `npm ci --ignore-scripts` 后执行 `npm test`，复现 62 PASS / 1 FAIL：`tests/external-player-process-chain.test.cjs` 模块加载阶段直接读取缺失的 ignored `src/electronapp/preload.js`。vendor 只有 214-byte Carnival preload；主开发工作区的 620-byte diagnostics preload 没有 Git source 或 prepare 生成 contract。
+
+新增 `tools/prepare-preload.cjs`，以 vendor preload 为只读 base 生成 deterministic prepared workspace artifact，保留现有 IPC/fs/os/appdata bridge，加入非阻塞 diagnostics bridge 和带 runId 的 sticky readiness state。`prepare.ps1`、`build.ps1` 共用生成器；`runtime-provenance.cjs` 新增 prepared artifact contract，旧/手工/过期 preload 会 fail closed。其它 ignored inputs 审计为 SAFE/INTENTIONAL/UNKNOWN，没有把整个 Web snapshot 纳入 Git。
+
+readiness observer 新增 raw ready、direct diagnostics、sticky state、core-playing 和 video-progress facts；live flow 只在 manager resolved、core-playing、视频推进、Session NowPlaying 与已接受 playback report 齐全时把缺少 direct marker 的 run 判为 class B alternate evidence。`tools/readiness-evidence.cjs` 和新增 synthetic tests 覆盖 A/B/C/D/E；不把 `play-called` 单独当作 ready，outgoing loadfile 仍保持 unavailable observability gap。
+
+提交：`6c5cc9e05b7dbec6a01a2cf81cd19209deb0b319`，消息为 `fix: make clean-room inputs and readiness evidence reproducible`。验证：`npm test` 77/77；Node/PowerShell syntax PASS；acceptance readiness、terminal race/integration、PID reuse descendant synthetic PASS。两个独立 cleanroom worktree 的 prepare/npm test/build/provenance/package verify 全部 PASS，runtime payload 各 2116 且逐路径 hashes identical。
+
+真实验证使用 cleanroom-1 validated runtime，串行 startup-only 10 次和 full-control 2 次。startup 10/10 class A、raw/direct/sticky readiness 10/10、resolver/core/video/Session/progress/stop 10/10、cleanup verified-clean、residual 0；full-control 2/2 的 pause/seek/resume/next/stop 和 10 条 reports 均通过。旧 vendor-only runtime 的对照 run 为 class B，direct marker 缺失但 manager/core/video/Session/progress 全部成功，证明 observer miss 被单独分类。详细脱敏证据见 `docs/CLEANROOM_REPRODUCIBILITY.md` 与 `docs/READINESS_OBSERVABILITY.md`。
+
 ## 2026-09-14 — External Player process-control cleanup Batch 2
 
 基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 创建 `cleanup/external-player-process-chain`，完成 Foundation Cleanup / Legacy Cleanup Batch 2。按任务书重新审计了 `rg`、IPC registration、`electronapphost` protocol dispatch、动态 command string、preload exposure、shell consumer、main caller、tests 和 build/package 输入。Batch 1 已将旧 External Player frontend/plugin 从 fresh runtime 排除，因此 `mpvPosEvent`/`mpvPos`/`mpv-socket`、Electron custom shell process methods、shell protocol process cases 和 main process helper chain 均确认没有其它当前 consumer。

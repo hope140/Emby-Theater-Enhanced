@@ -503,6 +503,30 @@ try {
         $residualCount = 0
     }
     $acceptancePresent = Test-Path -LiteralPath $acceptancePath -PathType Leaf
+    $acceptanceSummary = $null
+    if ($acceptancePresent) {
+        try {
+            $acceptanceReport = Get-Content -LiteralPath $acceptancePath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $playStage = @($acceptanceReport.stages | Where-Object { $_.method -eq 'play' } | Select-Object -Last 1)
+            $playResult = if ($playStage.Count -gt 0) { $playStage[0].result } else { $null }
+            $acceptanceSummary = [ordered]@{
+                acceptanceResult = [string]$acceptanceReport.acceptanceResult
+                currentStage = [string]$acceptanceReport.currentStage
+                readinessResult = if ($null -ne $acceptanceReport.readiness) { [string]$acceptanceReport.readiness.result } else { $null }
+                acceptanceClass = if ($null -ne $acceptanceReport.readiness) { [string]$acceptanceReport.readiness.acceptanceClass } else { $null }
+                rawPepperReady = if ($null -ne $acceptanceReport.readiness -and $null -ne $acceptanceReport.readiness.pepperReadiness) { [bool]$acceptanceReport.readiness.pepperReadiness.rawEventObserved } else { $false }
+                authoritativeReadinessConfirmed = if ($null -ne $acceptanceReport.readiness) { [bool]$acceptanceReport.readiness.authoritativeReadinessConfirmed } else { $false }
+                observerOnlyMiss = if ($null -ne $acceptanceReport.readiness) { [bool]$acceptanceReport.readiness.observerOnlyMiss } else { $false }
+                playbackSucceeded = if ($null -ne $playResult) { [bool]$playResult.readinessAssessment.playbackSucceeded } else { $false }
+                managerPlayResolved = if ($null -ne $playResult) { [bool]$playResult.managerPlayResolved } else { $false }
+                corePlaying = if ($null -ne $playResult) { [bool]$playResult.corePlayingObserved } else { $false }
+                videoFrameEquivalent = if ($null -ne $playResult) { [bool]$playResult.videoFrameEquivalent } else { $false }
+                sessionNowPlaying = if ($null -ne $playResult) { [bool]$playResult.sessionNowPlaying } else { $false }
+                progressReportAccepted = if ($null -ne $playResult) { [bool]$playResult.progressReportAccepted } else { $false }
+                stopCleanup = if ($null -ne $acceptanceReport.stages) { [bool](@($acceptanceReport.stages | Where-Object { $_.method -eq 'stop' -and $_.result.ok }).Count -gt 0) } else { $false }
+            }
+        } catch { $acceptanceSummary = $null }
+    }
     $elapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds
     $runnerResult = if ($startError) { 'start-failed' } elseif ($timedOut) { 'timeout' } elseif ($cleanupStatus -eq 'unverified') { 'cleanup-unverified' } elseif ($residualPids.Count -gt 0) { 'residual-owned-processes' } elseif ($terminalObserved) { 'completed' } else { 'missing-terminal-result' }
     $runnerExitCode = if ($runnerResult -eq 'completed' -and $terminalClassification -eq 'success') { 0 } elseif ($runnerResult -eq 'timeout') { 124 } else { 1 }
@@ -513,6 +537,7 @@ try {
         sourceCommit = $sourceCommit
         runtimeValidation = $runtimeValidation
         terminalResult = [ordered]@{ observed = $terminalObserved; source = if ($terminalObserved) { 'acceptance.json completed + classification' } else { 'not-observed' }; classification = $terminalClassification; observedElapsedMs = $terminalObservedElapsedMs }
+        acceptanceSummary = $acceptanceSummary
         ownershipIssues = @($ownershipIssues)
         cleanupStatus = $cleanupStatus
         ownershipVerified = $ownershipVerified

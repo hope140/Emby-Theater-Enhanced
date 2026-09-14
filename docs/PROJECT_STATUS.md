@@ -1,5 +1,17 @@
 # 项目状态
 
+## 2026-09-15 — Clean-room reproducibility / readiness observability hardening
+
+基于正式基线 `main@56b2227324811b525cd73caed61e3399cd2875e5` 创建独立分支 `audit/cleanroom-readiness-hardening`，代码提交为 `6c5cc9e05b7dbec6a01a2cf81cd19209deb0b319`。本轮只修改 prepare/build/provenance、acceptance observer/runner、diagnostics tooling、tests 和 docs；没有修改 PlaybackManager、resolver、libmpv 播放逻辑、Session/remote control、settings/autoplay、UI、CEC、Electron 或 mpv 版本。
+
+修复 clean-room blocker：`src/electronapp/preload.js` 原来被 `.gitignore` 忽略，测试直接读取但 `prepare.ps1` 没有生成来源。现在由 tracked `tools/prepare-preload.cjs` 从 vendor Carnival preload 生成 prepared workspace artifact，并由 `prepare.ps1`、`build.ps1` 共用；runtime provenance 单独校验 vendor base、generator、prepared source 和 runtime hash。旧 214-byte vendor preload 与 Enhanced diagnostics/sticky state 不再混淆。
+
+两个独立 clean worktree 各自执行 `npm ci --ignore-scripts`、prepare、`npm test`、build、provenance 和 `package.ps1 -VerifyOnly`，均通过；`npm test` 为 77/77，runtime 各 2116 个 payload，scope 54，prepared artifact valid，两个 build manifest 逐路径 SHA256 identical。
+
+readiness observer 现在记录 raw embed ready、direct diagnostics callback、sticky/current readiness、core-playing、视频 PositionTicks、Session/progress 和 Stop；带 runId/时间/bridge 关联，旧 run 不能污染新 run。完整 alternate evidence 缺少 direct marker 时归类为 class B observer-only-miss，不再当作 Pepper initialization failure。当前 10 次 startup real run 为 A 10/10、playback 10/10、raw/authoritative readiness 10/10、observer miss 0/10、actual player failure 0/10；2 次 full-control 通过，Stop 后 NowPlaying 清空、runner residual=0。结论详见 [CLEANROOM_REPRODUCIBILITY](CLEANROOM_REPRODUCIBILITY.md) 和 [READINESS_OBSERVABILITY](READINESS_OBSERVABILITY.md)。
+
+基础环境记录为 host Node `v24.18.1`、Windows PowerShell `5.1.26100.9444`、bundled Electron `18.3.15`，embedded Node `16.13.2`。本轮不 push、不 merge、不发布。
+
 ## 2026-09-14 — External Player process-control cleanup Batch 2
 
 基于 `main@65d97da975ea1ffc3505c099094086c33667931e` 在 `cleanup/external-player-process-chain` 完成本批 host/process legacy cleanup。重新审计确认 Batch 1 已从 fresh runtime 排除 External Player frontend/plugin，`mpvPosEvent`、`mpvPos`、`mpv-socket`、Electron custom shell 的 `canExec/exec/close`、close-event helpers、`shellstart/shellclose`、`processes`、`startProcess`、`closeProcess` 和旧 `execFile` callback chain 均无其它当前 consumer，已从维护产品代码删除。

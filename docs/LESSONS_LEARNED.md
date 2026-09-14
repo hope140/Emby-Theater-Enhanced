@@ -57,3 +57,6 @@
 55. terminal acceptance report 已持久化后 root 自然退出属于可验证收尾路径；runner 可只检查已建立 ownership 的 known descendants，并保持 creation-date 边界，不能把正常 root exit 误报成 harness failure。
 56. 当前 Alameda acceptance loader 可能返回 Promise，且 `ConnectionManager.currentApiClient` 可能在 global 初始化后才出现；profile inspect 必须兼容 callback/Promise 和有界等待，失败只能输出安全枚举。
 57. Pepper bridge 的行为回归必须模拟 attach 同步窗口内的 immediate ready；仅检查 `addEventListener` 与 `insertBefore` 的文本顺序不足以证明 callback 实际捕获事件。listener ordering 修复应保持 `{once:true}` 和现有 destroy/reuse 生命周期，并用一次有界真实 acceptance 做非性能性质的回归。
+58. ignored required source 不能靠开发机残留维持：如果 `src/electronapp/preload.js` 是 vendor-derived 加项目诊断的 prepared artifact，应由 tracked generator 在 prepare/build 中生成，并由 test、runtime provenance 共用同一 contract；缺失时测试必须失败而不是 skip。
+59. readiness 证据必须分层：embed raw `ready`、产品 diagnostics callback、sticky/current state、core-playing、视频 PositionTicks、Session NowPlaying 和已接受 report 各自记录；direct marker 缺失但完整播放事实存在时归为 class B observer-only-miss，不能写成 Pepper initialization failure，也不能 silent PASS。
+60. run-scoped readiness state 需要 runId、时间边界和 bridge identity；旧 run 的 ready event 即使晚到也不能污染新 run。loadfile 或产品函数调用不可观测时保留 unavailable/observation wording，不用 manager resolved 替代未取得的信号。

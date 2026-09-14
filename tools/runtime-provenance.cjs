@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const preloadPreparation = require('./prepare-preload.cjs');
 
 const OVERLAY_RUNTIME_PATH = 'electronapp/www/modules/common/playback/playbackmanager.js';
 const OVERLAY_GENERATOR_PATH = 'tools/patch-playbackmanager.cjs';
@@ -12,6 +13,14 @@ const APP_RUNTIME_PATH = 'electronapp/www/app.js';
 const APP_SOURCE_PATH = 'src/electronapp/www/app.js';
 const APP_GENERATOR_PATH = 'tools/patch-external-player-registration.cjs';
 const START_WRAPPERS = ['tools/Start-Enhanced.ps1', 'tools/Start-Enhanced.cmd'];
+const PREPARED_SOURCE_PATHS = Object.freeze([preloadPreparation.PREPARED_PRELOAD_PATH]);
+const PREPARED_ARTIFACT_CONTRACT = Object.freeze([{
+    preparedPath: preloadPreparation.PREPARED_PRELOAD_PATH,
+    basePath: preloadPreparation.BASE_PRELOAD_PATH,
+    runtimePath: preloadPreparation.RUNTIME_PRELOAD_PATH,
+    generatorPath: 'tools/prepare-preload.cjs',
+    category: 'prepared-workspace-artifact'
+}]);
 const EXCLUDED_SOURCE_PREFIXES = Object.freeze([
     'src/electronapp/www/modules/externalplayer/'
 ]);
@@ -55,6 +64,10 @@ function isExcludedSourcePath(sourcePath) {
     return EXCLUDED_SOURCE_PREFIXES.some(prefix => sourcePath.startsWith(prefix));
 }
 
+function isPreparedSourcePath(sourcePath) {
+    return PREPARED_SOURCE_PATHS.indexOf(sourcePath) >= 0;
+}
+
 function sameStringArray(actual, expected) {
     return Array.isArray(actual) && actual.length === expected.length &&
         actual.every((value, index) => value === expected[index]);
@@ -82,7 +95,7 @@ function sourceEntries(root) {
     const entries = walkFiles(sourceRoot).map(file => {
         const relative = slash(path.relative(sourceRoot, file));
         const sourcePath = 'src/electronapp/' + relative;
-        if (isExcludedSourcePath(sourcePath)) return null;
+        if (isExcludedSourcePath(sourcePath) || isPreparedSourcePath(sourcePath)) return null;
         return {
             sourcePath,
             runtimePath: 'electronapp/' + relative,
@@ -102,6 +115,43 @@ function sourceEntries(root) {
     return entries.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
 }
 
+function buildPreparedArtifactEntries(root, runtime) {
+    return PREPARED_ARTIFACT_CONTRACT.map(contract => {
+        const baseFile = path.join(root, contract.basePath);
+        const preparedFile = path.join(root, contract.preparedPath);
+        const runtimeFile = path.join(runtime, contract.runtimePath);
+        const generatorFile = path.join(root, contract.generatorPath);
+        if (!exists(baseFile) || !exists(preparedFile) || !exists(runtimeFile) || !exists(generatorFile)) {
+            throw new Error('Prepared artifact input missing: ' + contract.preparedPath);
+        }
+        const baseText = fs.readFileSync(baseFile, 'utf8');
+        const expectedText = preloadPreparation.buildPreparedPreload(baseText);
+        const baseSha256 = hashFile(baseFile);
+        const generatorSha256 = hashFile(generatorFile);
+        const preparedSha256 = hashFile(preparedFile);
+        const runtimeSha256 = hashFile(runtimeFile);
+        const expectedPreparedSha256 = preloadPreparation.sha256(Buffer.from(expectedText, 'utf8'));
+        if (preparedSha256 !== expectedPreparedSha256) {
+            throw new Error('Prepared artifact hash mismatch: ' + contract.preparedPath);
+        }
+        if (runtimeSha256 !== preparedSha256) {
+            throw new Error('Prepared artifact runtime mismatch: ' + contract.preparedPath + ' -> ' + contract.runtimePath);
+        }
+        return {
+            preparedPath: contract.preparedPath,
+            basePath: contract.basePath,
+            runtimePath: contract.runtimePath,
+            generatorPath: contract.generatorPath,
+            category: contract.category,
+            baseSha256: baseSha256,
+            generatorSha256: generatorSha256,
+            expectedPreparedSha256: expectedPreparedSha256,
+            preparedSha256: preparedSha256,
+            runtimeSha256: runtimeSha256
+        };
+    });
+}
+
 function baselineIdentity(root) {
     const manifestPath = path.join(root, 'vendor', 'runtime-manifest.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -119,6 +169,7 @@ function writeManifest(root, runtime, sourceCommit) {
     if (!/^[0-9a-fA-F]{40}$/.test(sourceCommit || '')) throw new Error('sourceCommit must be a 40-character git commit.');
     const entries = sourceEntries(root);
     const buildOverlays = buildOverlayEntries(root, runtime);
+    const preparedArtifacts = buildPreparedArtifactEntries(root, runtime);
     const files = entries.map(entry => {
         const sourceFile = path.join(root, entry.sourcePath);
         const runtimeFile = path.join(runtime, entry.runtimePath);
@@ -140,11 +191,13 @@ function writeManifest(root, runtime, sourceCommit) {
             includesIgnoredSourceFiles: true,
             includesStartWrappers: true,
             excludedSourcePrefixes: [...EXCLUDED_SOURCE_PREFIXES],
-            description: 'All non-excluded repo-owned src/electronapp files plus Start-Enhanced wrappers; package metadata and PlaybackManager are recorded as explicit build overlays',
+            preparedSourcePaths: [...PREPARED_SOURCE_PATHS],
+            description: 'All non-excluded repo-owned src/electronapp files plus Start-Enhanced wrappers; prepared workspace artifacts and package metadata/PlaybackManager are recorded separately',
             fileCount: files.length,
             files
         },
         buildOverlays,
+        preparedArtifacts,
         exclusions: ['vendor baseline payload', 'node_modules production closure', 'Electron runtime binaries', 'native mpv binary']
     };
     fs.writeFileSync(path.join(runtime, 'runtime-provenance.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
@@ -166,9 +219,12 @@ function failedValidation(runtime, sourceCommit, errors, files, manifest) {
                 runtimeRoot: manifest.validatedProductScope.runtimeRoot,
                 excludedSourcePrefixes: Array.isArray(manifest.validatedProductScope.excludedSourcePrefixes)
                     ? manifest.validatedProductScope.excludedSourcePrefixes : [],
+                preparedSourcePaths: Array.isArray(manifest.validatedProductScope.preparedSourcePaths)
+                    ? manifest.validatedProductScope.preparedSourcePaths : [],
                 fileCount: manifest.validatedProductScope.fileCount
             }
             : null,
+        preparedArtifacts: manifest && Array.isArray(manifest.preparedArtifacts) ? manifest.preparedArtifacts : [],
         files: files || [],
         errors
     };
@@ -211,6 +267,26 @@ function validateBuildOverlays(root, runtime, manifest, errors) {
     return checks;
 }
 
+function validatePreparedArtifacts(root, runtime, manifest, errors) {
+    let expected;
+    try {
+        expected = buildPreparedArtifactEntries(root, runtime);
+    } catch (error) {
+        errors.push(String(error && error.message || '').indexOf('Prepared artifact runtime mismatch:') === 0
+            ? 'prepared-artifact-runtime-mismatch' : 'prepared-artifact-input-missing');
+        return [];
+    }
+    const actual = manifest && Array.isArray(manifest.preparedArtifacts) ? manifest.preparedArtifacts : [];
+    if (actual.length !== expected.length) errors.push('prepared-artifact-contract-mismatch');
+    return expected.map((expectedEntry, index) => {
+        const entry = actual[index] || {};
+        const fields = ['preparedPath', 'basePath', 'runtimePath', 'generatorPath', 'category', 'baseSha256', 'generatorSha256', 'expectedPreparedSha256', 'preparedSha256', 'runtimeSha256'];
+        const matches = fields.every(field => entry[field] === expectedEntry[field]);
+        if (!matches) errors.push('prepared-artifact-mismatch:' + expectedEntry.preparedPath);
+        return Object.assign({}, entry, {valid: matches});
+    });
+}
+
 function validateManifest(root, runtime, sourceCommit) {
     const errors = [];
     const manifestPath = path.join(runtime, 'runtime-provenance.json');
@@ -235,7 +311,11 @@ function validateManifest(root, runtime, sourceCommit) {
     if (!sameStringArray(scope.excludedSourcePrefixes, EXCLUDED_SOURCE_PREFIXES)) {
         errors.push('source-exclusion-contract-mismatch');
     }
+    if (!sameStringArray(scope.preparedSourcePaths, PREPARED_SOURCE_PATHS)) {
+        errors.push('prepared-source-contract-mismatch');
+    }
     const buildOverlays = validateBuildOverlays(root, runtime, manifest, errors);
+    const preparedArtifacts = validatePreparedArtifacts(root, runtime, manifest, errors);
     const expected = sourceEntries(root);
     const bySource = new Map(scope.files.map(entry => [entry.sourcePath, entry]));
     const expectedSources = new Set(expected.map(entry => entry.sourcePath));
@@ -306,10 +386,12 @@ function validateManifest(root, runtime, sourceCommit) {
             runtimeRoot: scope.runtimeRoot,
             includesIgnoredSourceFiles: scope.includesIgnoredSourceFiles === true,
             excludedSourcePrefixes: Array.isArray(scope.excludedSourcePrefixes) ? scope.excludedSourcePrefixes : [],
+            preparedSourcePaths: Array.isArray(scope.preparedSourcePaths) ? scope.preparedSourcePaths : [],
             fileCount: scope.fileCount,
             currentFileCount: expected.length
         },
         buildOverlays,
+        preparedArtifacts,
         files: checks,
         errors
     };
