@@ -2,9 +2,9 @@
 
 ## 2026-09-14 — terminal writer 与 cleanup verification follow-up
 
-本轮只处理 acceptance harness 的终态写入和 cleanup verification，产品代码、resolver、observer、PlaybackManager、libmpv、preload、CD2、Pepper bridge 与服务器配置均未修改。`inspectProfile()`、normal success/failure、operation failure 与 global timeout 现在都通过同一个 `createTerminalWriter()`，其内部复用 `OPEN → FINALIZING → COMPLETED` single-writer guard；losing path 在 await 返回后先检查 ownership，不再写入 shared `failure`、terminal classification 或 `report.completed`。
+本轮只处理 acceptance harness 的终态写入和 cleanup verification，产品代码、resolver、observer、PlaybackManager、libmpv、preload、CD2、Pepper bridge 与服务器配置均未修改。`inspectProfile()`、normal success/failure、operation failure 与 global timeout 现在都通过同一个 `createTerminalWriter()`，其内部复用 `OPEN → FINALIZING → COMPLETED` single-writer guard；losing path 在 await 返回后先检查 ownership，不再写入 shared `failure`、terminal classification 或 `report.completed`。cleanup 入口先用当前 root PID 与原始 CreationDate 完成 identity validation，再将同一已验证 snapshot 交给 tree observation；root missing、reuse 或 CIM unavailable 都不会登记或清理 descendants。
 
-新增 integration synthetic 覆盖 `inspectProfile` failure 与 global timeout 的近同时竞争，以及 success claim 后 losing failure 的污染尝试；两项均只产生一次 terminal save，胜出的 classification 保持不变。CIM/WMI 查询失败现在 fail closed：不 kill 未确认 ownership 的 PID，`cleanupStatus=unverified`、`ownershipVerified=false`、`residualOwnedProcesses=null`，runnerResult=`cleanup-unverified` 且返回非零。正常 success/failure/timeout 保持 `verified-clean`；CreationDate mismatch 保持 `pid-reused`/`ownership-mismatch` 并阻止完整 cleanup success。
+新增 integration synthetic 覆盖 `inspectProfile` failure 与 global timeout 的近同时竞争，以及 success claim 后 losing failure 的污染尝试；两项均只产生一次 terminal save，胜出的 classification 保持不变。CIM/WMI 查询失败现在 fail closed：不 kill 未确认 ownership 的 PID，`cleanupStatus=unverified`、`ownershipVerified=false`、`residualOwnedProcesses=null`，runnerResult=`cleanup-unverified` 且返回非零。新增 PID-reuse-with-descendant synthetic，确认复用 root 的 child 未被登记或终止。正常 success/failure/timeout 保持 `verified-clean`；CreationDate mismatch 保持 `pid-reused`/`ownership-mismatch` 并阻止完整 cleanup success。
 
 `dist/EmbyTheaterEnhanced-0.1.1-provenance3-20260914` 在本 follow-up commit 前绑定 `8a3433e53a9c47bba0c25ff5b43e1b3281a4fe9e`，full provenance positive validation 820/820 通过；较早 `provenance2` runtime 因 sourceCommit stale 被 ValidationOnly negative 正确报告为 `runtime-validation-failed`，未启动 Electron。未运行真实 Emby acceptance。
 
@@ -13,7 +13,7 @@ Model: current Codex session
 Reason: terminal ownership race and cleanup-verification semantics cross the Electron writer and PowerShell runner, while product playback remains frozen
 Escalated: no
 
-结论：terminal writer、inspectProfile integration race、losing-writer protection、CIM unavailable fail-closed 和既有 PID mismatch 均有合成证据，可进入独立 follow-up commit review。
+结论：terminal writer、inspectProfile integration race、losing-writer protection、CIM unavailable fail-closed、root-before-tree ordering 和既有 PID mismatch 均有合成证据，已形成独立 follow-up commit，可进入 targeted review。
 
 ## 2026-09-14 — readiness harness boundary hardening
 

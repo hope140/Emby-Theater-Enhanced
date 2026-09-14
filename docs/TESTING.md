@@ -24,6 +24,7 @@ node tests/acceptance-terminal-integration-selftest.cjs
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -Synthetic -SyntheticResult success -RunPrefix synthetic-success
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -Synthetic -SyntheticResult failure -RunPrefix synthetic-failure
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -Synthetic -SyntheticResult identity-mismatch -RunPrefix synthetic-pid-mismatch
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/pid-reuse-descendant-selftest.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -Synthetic -SyntheticCimUnavailable -SyntheticResult cim-unavailable -RunPrefix synthetic-cim-unavailable
 ```
 
@@ -37,7 +38,7 @@ inspect acquisition 使用现有 `window.ConnectionManager.currentApiClient()`�
 
 current-main verification runtime：`dist/EmbyTheaterEnhanced-0.1.1-readiness-main-20260914` 从 HEAD `c880b97757be422ae818fe30b3a335003e41227b` 构建，`libmpv.js`、`strm-resolver.js`、`cd2-resolver.js`、`enhanced/cd2-service.js` 四项 source/runtime SHA256 均 MATCH，resolver directory 存在，`resolveAsync` 与 resolver-result marker 存在。runner 对旧 `final-win-x64` 的 fail-fast negative 已通过，未启动 Electron。`resolver-enter` 已更名为 `resolver-result`；loadfile observation 为 `unavailable`，不再作为硬 gate。
 
-runner terminal lifecycle：以 `acceptance.json` 的 `completed=true` + terminal classification 作为唯一终态；terminal success/failure 后等待 300ms flush window 并清理 exact owned root tree，只有没有 terminal report 才到达 deadline。synthetic success/failure/timeout 均通过，成功与明确失败为 `runnerResult=completed`、`timedOut=false`，真正 hang 为 `runnerResult=timeout`、`timedOut=true`，均 `cleanupStatus=verified-clean`、residual=0。PID CreationDate mismatch 与 CIM unavailable 都 fail closed，后者为 `cleanupStatus=unverified`、`ownershipVerified=false`、residual 未知，不能被记为完整 success。
+runner terminal lifecycle：以 `acceptance.json` 的 `completed=true` + terminal classification 作为唯一终态；terminal success/failure 后等待 300ms flush window 并清理 exact owned root tree，只有没有 terminal report 才到达 deadline。cleanup 先验证 root PID 的 CreationDate，再允许 observation/descendant registration；root missing、PID reuse 或 CIM unavailable 时不观察、不登记、不 kill descendants。synthetic success/failure/timeout 均通过，成功与明确失败为 `runnerResult=completed`、`timedOut=false`，真正 hang 为 `runnerResult=timeout`、`timedOut=true`，均 `cleanupStatus=verified-clean`、residual=0。PID CreationDate mismatch、PID-reuse-with-descendant 与 CIM unavailable 都 fail closed，后两者为 `cleanupStatus=unverified`、`ownershipVerified=false`、residual 未知，不能被记为完整 success。
 
 旧 artifact `readiness-main-20260914-070236533-48d1e60e`：`inspect=PASS`、`select=PASS`、`isStrm=true`、`play-called`、`embed-created`、`pepper-ready`、`manager-play-resolved`、`resolver-result` 全部通过；`loadfileObservation=unavailable`，acceptance 结果为 `success`。该 run 使用旧 runner lifecycle，最终 `runnerResult=timeout`，总耗时 `242507ms`，residual=0。
 

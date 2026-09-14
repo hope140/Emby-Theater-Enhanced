@@ -7,7 +7,7 @@ param(
     [switch]$ValidationOnly,
     [switch]$Synthetic,
     [switch]$SyntheticCimUnavailable,
-    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch', 'cim-unavailable')]
+    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch', 'pid-reuse-descendant', 'cim-unavailable')]
     [string]$SyntheticResult = 'timeout'
 )
 
@@ -45,6 +45,10 @@ $ownershipIssues = New-Object 'System.Collections.Generic.HashSet[string]'
 $cimUnavailable = $false
 $cleanupStatus = 'not-started'
 $ownershipVerified = $false
+$syntheticDescendantPid = $null
+$syntheticDescendantRegistered = $null
+$syntheticDescendantAliveAfterCleanup = $null
+$syntheticRootAliveAfterCleanup = $null
 $ownedPids = New-Object 'System.Collections.Generic.HashSet[int]'
 $ownedRecords = @{}
 $stdoutTask = $null
@@ -206,10 +210,12 @@ function Get-OwnedTree([object[]]$snapshot, [int]$ownerPid) {
     return @($tree.Keys | ForEach-Object { [int]$_ })
 }
 
-function Observe-OwnedTree {
+function Observe-OwnedTree([object[]]$validatedSnapshot) {
     if ($null -eq $rootPid) { return }
-    $snapshot = Get-ProcessSnapshot
+    $snapshot = if ($PSBoundParameters.ContainsKey('validatedSnapshot')) { $validatedSnapshot } else { Get-ProcessSnapshot }
     if ($null -eq $snapshot) { return }
+    $ownership = Get-RootOwnership -providedSnapshot $snapshot
+    if ($ownership.status -ne 'owned') { return }
     $tree = Get-OwnedTree -snapshot $snapshot -ownerPid $rootPid
     $script:ownershipInspection = 'ok'
     foreach ($ownedId in $tree) {
@@ -245,30 +251,48 @@ function Add-OwnershipIssue([string]$issue) {
     if ($issue) { [void]$ownershipIssues.Add($issue) }
 }
 
-function Get-RootOwnership {
+function Get-RootOwnership([object[]]$providedSnapshot) {
     if ($null -eq $rootPid) { return [pscustomobject]@{ status = 'no-root' } }
-    $snapshot = Get-ProcessSnapshot
+    $snapshot = if ($PSBoundParameters.ContainsKey('providedSnapshot')) { $providedSnapshot } else { Get-ProcessSnapshot }
     if ($null -eq $snapshot) { return [pscustomobject]@{ status = 'unavailable' } }
     $script:ownershipInspection = 'ok'
     $current = @($snapshot | Where-Object { [int]$_.Id -eq [int]$rootPid } | Select-Object -First 1)
-    if ($current.Count -eq 0) { return [pscustomobject]@{ status = 'exited' } }
+    if ($current.Count -eq 0) {
+        Add-OwnershipIssue 'root-missing'
+        return [pscustomobject]@{ status = 'exited'; snapshot = $snapshot }
+    }
     $expected = $ownedRecords[[int]$rootPid]
     if ($null -eq $expected -or [string]::IsNullOrEmpty([string]$expected.CreationDate)) {
         Add-OwnershipIssue 'ownership-mismatch'
-        return [pscustomobject]@{ status = 'mismatch' }
+        return [pscustomobject]@{ status = 'mismatch'; snapshot = $snapshot }
+    }
+    if ([string]::IsNullOrEmpty([string]$current[0].CreationDate)) {
+        Add-OwnershipIssue 'ownership-unavailable'
+        return [pscustomobject]@{ status = 'unavailable'; snapshot = $snapshot }
     }
     if ([string]$current[0].CreationDate -ne [string]$expected.CreationDate) {
         Add-OwnershipIssue 'pid-reused'
         Add-OwnershipIssue 'ownership-mismatch'
-        return [pscustomobject]@{ status = 'pid-reused'; expectedCreationDate = [string]$expected.CreationDate; currentCreationDate = [string]$current[0].CreationDate }
+        return [pscustomobject]@{ status = 'pid-reused'; expectedCreationDate = [string]$expected.CreationDate; currentCreationDate = [string]$current[0].CreationDate; snapshot = $snapshot }
     }
-    return [pscustomobject]@{ status = 'owned' }
+    return [pscustomobject]@{ status = 'owned'; snapshot = $snapshot }
 }
 
-function Stop-OwnedRoot {
-    $ownership = Get-RootOwnership
-    if ($ownership.status -eq 'owned') { Stop-ExactProcessTree -targetPid ([int]$rootPid) }
-    return $ownership.status
+function Initialize-OwnedRoot {
+    if ($null -eq $rootPid) { return }
+    $snapshot = Get-ProcessSnapshot
+    if ($null -eq $snapshot) { return }
+    $current = @($snapshot | Where-Object { [int]$_.Id -eq [int]$rootPid } | Select-Object -First 1)
+    if ($current.Count -eq 0) {
+        Add-OwnershipIssue 'root-missing'
+        return
+    }
+    if ([string]::IsNullOrEmpty([string]$current[0].CreationDate)) {
+        Add-OwnershipIssue 'ownership-unavailable'
+        return
+    }
+    $ownedRecords[[int]$rootPid] = $current[0]
+    Observe-OwnedTree -validatedSnapshot $snapshot
 }
 
 function Get-TerminalAcceptance([string]$reportPath) {
@@ -292,9 +316,17 @@ function Stop-ExactProcessTree([int]$targetPid) {
 }
 
 function Stop-OwnedProcesses([bool]$includeRoot) {
-    Observe-OwnedTree
+    if ($null -eq $rootPid) {
+        Add-OwnershipIssue 'root-missing'
+        return
+    }
+    $ownership = Get-RootOwnership
+    if ($ownership.status -ne 'owned') { return }
+    Observe-OwnedTree -validatedSnapshot $ownership.snapshot
     if ($cimUnavailable) { return }
-    if ($includeRoot -and $null -ne $rootPid) { [void](Stop-OwnedRoot) }
+    $postObservationOwnership = Get-RootOwnership
+    if ($postObservationOwnership.status -ne 'owned') { return }
+    if ($includeRoot) { Stop-ExactProcessTree -targetPid ([int]$rootPid) }
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
         $live = @(Get-LiveOwnedRecords | Where-Object { $null -eq $rootPid -or [int]$_.Id -ne [int]$rootPid })
         if ($live.Count -eq 0) { break }
@@ -356,7 +388,7 @@ try {
     if ($null -eq $process) { throw 'Process start returned no process.' }
     $rootPid = [int]$process.Id
     [void]$ownedPids.Add($rootPid)
-    Observe-OwnedTree
+    Initialize-OwnedRoot
     $stdoutTask = $process.StandardOutput.ReadToEndAsync()
     $stderrTask = $process.StandardError.ReadToEndAsync()
 
@@ -369,7 +401,7 @@ try {
             $terminalObserved = $true
             $terminalClassification = $terminal.classification
             $terminalObservedElapsedMs = [int]([DateTimeOffset]::UtcNow - $runnerStarted).TotalMilliseconds
-            if ($Synthetic -and $SyntheticResult -eq 'identity-mismatch') {
+            if ($Synthetic -and @('identity-mismatch', 'pid-reuse-descendant') -contains $SyntheticResult) {
                 $expectedRoot = $ownedRecords[[int]$rootPid]
                 if ($null -ne $expectedRoot) {
                     $ownedRecords[[int]$rootPid] = [pscustomobject]@{ Id = $expectedRoot.Id; ParentId = $expectedRoot.ParentId; Name = $expectedRoot.Name; CreationDate = 'synthetic-pid-reused' }
@@ -404,7 +436,6 @@ try {
             if ($process.HasExited) { $exited = $true } else { $timedOut = $true }
         }
     }
-    Observe-OwnedTree
     if ($timedOut) {
         Stop-OwnedProcesses -includeRoot $true
         if ($process.HasExited) { $processExitCode = $process.ExitCode }
@@ -426,6 +457,22 @@ try {
     Write-Utf8Text (Join-Path $output 'stdout.txt') $stdout
     Write-Utf8Text (Join-Path $output 'stderr.txt') $stderr
 
+    if ($Synthetic -and $SyntheticResult -eq 'pid-reuse-descendant') {
+        $syntheticPidPath = Join-Path $output 'synthetic-descendant-pid.txt'
+        if (Test-Path -LiteralPath $syntheticPidPath -PathType Leaf) {
+            $syntheticPidText = (Get-Content -LiteralPath $syntheticPidPath -Raw).Trim()
+            $parsedSyntheticPid = 0
+            if ([int]::TryParse($syntheticPidText, [ref]$parsedSyntheticPid) -and $parsedSyntheticPid -gt 0) {
+                $syntheticDescendantPid = $parsedSyntheticPid
+                $syntheticDescendantRegistered = $ownedRecords.ContainsKey([int]$syntheticDescendantPid)
+                $syntheticSnapshot = Get-ProcessSnapshot
+                if ($null -ne $syntheticSnapshot) {
+                    $syntheticRootAliveAfterCleanup = @($syntheticSnapshot | Where-Object { [int]$_.Id -eq [int]$rootPid }).Count -gt 0
+                    $syntheticDescendantAliveAfterCleanup = @($syntheticSnapshot | Where-Object { [int]$_.Id -eq [int]$syntheticDescendantPid }).Count -gt 0
+                }
+            }
+        }
+    }
     $liveFinal = @(Get-LiveOwnedRecords)
     $cleanupUnverified = $cimUnavailable -or $ownershipInspection -ne 'ok' -or @($ownershipIssues).Count -gt 0 -or $null -eq $rootPid
     if ($cleanupUnverified) {
@@ -472,6 +519,7 @@ try {
         residualOwnedProcessesKnown = $ownershipVerified
         residualOwnedPids = $residualPids
         cleanup = if ($cleanupStatus -eq 'unverified') { 'not-verified' } else { 'exact-root-process-tree' }
+        syntheticOwnershipAudit = if ($null -ne $syntheticDescendantPid) { [ordered]@{ rootAliveAfterCleanup = $syntheticRootAliveAfterCleanup; descendantPid = $syntheticDescendantPid; registeredOwned = $syntheticDescendantRegistered; aliveAfterCleanup = $syntheticDescendantAliveAfterCleanup } } else { $null }
         output = $output
         error = $startError
     }
