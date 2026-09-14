@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1
 python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv/x64/mpv-1.dll
 ```
 
-单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount 和 persistent profile inspect 安全枚举。当前为 67/67。修改 JS 已通过 node --check；PS 脚本由实际 PowerShell 5.1 构建与打包验证。
+单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount、persistent profile inspect 安全枚举、prepared preload source-of-truth 和 readiness A/B/C/D/E 证据分类。当前为 77/77。修改 JS 已通过 node --check；PS 脚本由实际 Windows PowerShell 5.1 构建与打包验证。
 
 ## Acceptance readiness harness
 
@@ -28,7 +28,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/pid-reuse-descendant-s
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -Synthetic -SyntheticCimUnavailable -SyntheticResult cim-unavailable -RunPrefix synthetic-cim-unavailable
 ```
 
-observer 只记录安装时间、`enhancedDiagnostics` wrapper、`enhancedDiagnostics(..., 'ready'/'playing')`、mpv embed、bridge message summary、resolver console marker 与可观察到的 loadfile。native bootstrap ready 不替代 authoritative Pepper-ready；模块解析和 `play-called`、`embed-created`、`pepper-ready`、`manager-play-resolved`、`resolver-result` gate 由 `tests/live-acceptance-browser.js` 解释。observer synthetic self-test 和 runner synthetic lifecycle 均通过，observer 为约 126 LOC，旧 AMD probe/event bus/timeline machinery 已删除。
+observer 只记录安装时间、raw embed ready、`enhancedDiagnostics` wrapper/direct callback、prepared preload sticky state、mpv embed、bridge message summary、core-playing/video-progress、resolver console marker 与可观察到的 loadfile。native bootstrap ready 不替代 authoritative Pepper-ready；模块解析和 `play-called`、`embed-created`、manager/playback alternate evidence、`resolver-result` gate 由 `tests/live-acceptance-browser.js` 解释。`pepperReadiness.status` 明确区分 `observed-ready`、`inferred-ready-from-authoritative-state`、`not-ready`、`observer-missing`、`unavailable`，A/B/C/D 和 stale-run synthetic 均通过。outgoing loadfile 继续如实记录为 unavailable，不降低 readiness 标准。
+
+Clean-room 与 readiness 详细命令、source-of-truth、ignored input 分类和真实矩阵见 `docs/CLEANROOM_REPRODUCIBILITY.md`、`docs/READINESS_OBSERVABILITY.md`。
 
 inspect acquisition 使用现有 `window.ConnectionManager.currentApiClient()`（必要时 `window.ApiClient`）、单次 canonical `require(['playbackManager'])` 和 `window.Events`，每个对象独立记录 source/result；不使用三模块 batch require、自动扫描或新的 AMD resolver。现有可重复 fixture 覆盖 profile inspect 的 client lookup；global API、single PlaybackManager require 与 PlaybackManager global fallback 是 acceptance flow 的受控代码路径和 real artifact 证据，不在文档中宣称有独立 fixture 覆盖。
 
