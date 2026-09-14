@@ -38,6 +38,37 @@ window.eteAcceptance = (function () {
     function gateFailure(reason, classification, stage, extra) {
         return Object.assign({ ok: false, reason, failureClassification: classification, stage, readiness: readiness() }, extra || {});
     }
+    function beginPlaybackRun() {
+        const runId = 'play-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        try { if (window.__eteReadiness && typeof window.__eteReadiness.beginRun === 'function') window.__eteReadiness.beginRun(runId); } catch (error) { }
+        return runId;
+    }
+    function assessPlaybackReadiness(managerResolved, progressed, server, resolverObserved) {
+        const state = readiness() || {};
+        const reportRows = reports.filter(row => row && row.accepted === true);
+        const progressReportAccepted = reportRows.some(row => row.method === 'reportPlaybackStart' || row.method === 'reportPlaybackProgress');
+        const corePlayingObserved = state.corePlayingSeen === true || stageSeen('core-playing');
+        const corePlayingInferred = managerResolved === true && progressed === true && !corePlayingObserved;
+        if (!window.eteReadinessEvidence || typeof window.eteReadinessEvidence.classify !== 'function') {
+            return { classification: 'D', reason: 'readiness-classifier-unavailable', playbackSucceeded: false,
+                authoritativeReadinessConfirmed: false, observerOnlyMiss: false, alternateEvidence: false,
+                pepperReadiness: { status: 'unavailable', evidence: [], rawPepperReadyObserved: false, normalizedObservation: 'missing' }, evidence: [] };
+        }
+        return window.eteReadinessEvidence.classify({
+            runnerFailed: false,
+            observerAvailable: state.version === 1,
+            rawPepperReadyObserved: state.pepperReadyRawEventSeen === true || state.nativeBootstrapReadySeen === true,
+            directReadyObserved: state.diagnosticsReadyObserved === true,
+            stickyReadyObserved: state.stickyReadinessObserved === true,
+            managerPlayResolved: managerResolved === true,
+            corePlayingObserved: corePlayingObserved,
+            corePlayingInferred: corePlayingInferred,
+            videoProgress: progressed === true,
+            videoProgressSource: 'PlaybackManager player PositionTicks advanced',
+            sessionNowPlaying: !!server,
+            progressReportAccepted: progressReportAccepted
+        });
+    }
     function globalValue(name) { try { return window[name]; } catch (error) { return null; } }
     function hasApiClient(value) {
         return !!(value && typeof value.getCurrentUser === 'function' && typeof value.getSessions === 'function' && typeof value.getItems === 'function');
@@ -205,27 +236,53 @@ window.eteAcceptance = (function () {
             return { ok: (resolved.sourceKind === 'direct-url' || resolved.sourceKind === 'cd2-url') && state.pathAccepted && !!state.fileFormat && state.coreIdleFalse && state.timeAdvanced, reason: state.timeAdvanced ? 'none' : 'playback-not-advancing', sourceKind: resolved.sourceKind || 'unknown', userAgentPresent: typeof userAgent === 'string' && userAgent.length > 0, expiresInPresent: resolved.expiresAt !== undefined, pathAccepted: state.pathAccepted, fileFormatPresent: !!state.fileFormat, coreIdleFalse: state.coreIdleFalse, timeAdvanced: state.timeAdvanced };
         },
         async play() {
-            const first = items[0]; authorizedPlayback = true; mark('play-called');
+            const first = items[0]; authorizedPlayback = true; beginPlaybackRun(); mark('play-called');
             let started;
-            try { started = Promise.resolve(manager.play({ items, fullscreen: true, startPositionTicks: 0 })); } catch (error) { return gateFailure('manager-play-rejected', 'manager-play-completion-timeout', 'manager-play-resolved', { errorType: error.name || 'Error' }); }
+            try { started = Promise.resolve(manager.play({ items, fullscreen: true, startPositionTicks: 0 })); } catch (error) {
+                const assessment = assessPlaybackReadiness(false, false, null, false);
+                return gateFailure('manager-play-rejected', 'runtime-readiness-failure', 'manager-play-resolved', { errorType: error.name || 'Error', readinessAssessment: assessment });
+            }
             const settled = started.then(value => { mark('manager-play-resolved'); return { state: 'resolved', value }; }, error => { return { state: 'rejected', errorType: error && error.name || 'Error' }; });
-            if (!await waitForStage('embed-created', GATES.embedMs)) return gateFailure('embed-not-created', 'embed-create-timeout', 'embed-created');
-            if (!await waitForStage('pepper-ready', GATES.pepperReadyMs)) { const state = readiness(); return gateFailure('pepper-authoritative-ready-missing', 'pepper-ready-timeout', 'pepper-ready', { nativeBootstrapReadySeen: !!(state && state.nativeBootstrapReadySeen), pepperAuthoritativeReady: !!(state && state.pepperAuthoritativeReady) }); }
+            if (!await waitForStage('embed-created', GATES.embedMs)) {
+                const assessment = assessPlaybackReadiness(false, false, null, false);
+                return gateFailure('embed-not-created', 'runtime-readiness-failure', 'embed-created', { readinessAssessment: assessment });
+            }
             const managerResult = await Promise.race([settled, wait(GATES.managerMs).then(() => ({ state: 'timeout' }))]);
-            if (managerResult.state === 'timeout') return gateFailure('manager-play-not-completed', 'manager-play-completion-timeout', 'manager-play-resolved');
-            if (managerResult.state === 'rejected') return gateFailure('manager-play-rejected', 'manager-play-completion-timeout', 'manager-play-resolved', { errorType: managerResult.errorType });
-            if (!await waitForStage('resolver-result', GATES.resolverMs)) return gateFailure('resolver-result-not-observed', 'resolver-result-timeout', 'resolver-result');
+            if (managerResult.state === 'timeout') {
+                const assessment = assessPlaybackReadiness(false, false, null, false);
+                return gateFailure('manager-play-not-completed', 'runtime-readiness-failure', 'manager-play-resolved', { readinessAssessment: assessment });
+            }
+            if (managerResult.state === 'rejected') {
+                const assessment = assessPlaybackReadiness(false, false, null, false);
+                return gateFailure('manager-play-rejected', 'runtime-readiness-failure', 'manager-play-resolved', { errorType: managerResult.errorType, readinessAssessment: assessment });
+            }
+            const resolver = waitForStage('resolver-result', GATES.resolverMs);
             const progressed = await until(() => { const state = playerState(); return state && state.item === first.Id && state.ticks > 30000000 ? state : null; }, 30000);
+            if (progressed) mark('video-progress');
             const server = await until(async () => { const state = await ownSession(); return state && state.NowPlayingItem && state.NowPlayingItem.Id === first.Id && state.PlayState.PositionTicks > 0 ? state : null; }, 15000);
+            const resolverState = await resolver;
             const finalReadiness = readiness();
-            return { ok: !!progressed && !!server, local: progressed, server: sanitizedSession(server), reported: reports.filter(row => row.item === first.Id), loadfileObservation: finalReadiness && finalReadiness.loadfileObservation === 'available' ? 'available' : 'unavailable' };
+            const assessment = assessPlaybackReadiness(true, !!progressed, server, !!resolverState);
+            const reported = reports.filter(row => row.item === first.Id);
+            if (!assessment.playbackSucceeded) {
+                return { ok: false, reason: 'playback-not-proven', failureClassification: 'runtime-readiness-failure', stage: 'core-playing',
+                    readinessAssessment: assessment, local: progressed, server: sanitizedSession(server), reported: reported,
+                    resolverObserved: !!resolverState, managerPlayResolved: true, corePlayingObserved: !!(finalReadiness && finalReadiness.corePlayingSeen),
+                    videoFrameEquivalent: !!progressed, sessionNowPlaying: !!server, progressReportAccepted: reported.some(row => row.accepted === true),
+                    loadfileObservation: finalReadiness && finalReadiness.loadfileObservation === 'available' ? 'available' : 'unavailable' };
+            }
+            return { ok: true, reason: assessment.classification === 'B' ? 'observer-miss-authoritative-alternate-evidence' : 'none', readinessAssessment: assessment,
+                local: progressed, server: sanitizedSession(server), reported: reported, resolverObserved: !!resolverState,
+                managerPlayResolved: true, corePlayingObserved: !!(finalReadiness && finalReadiness.corePlayingSeen),
+                videoFrameEquivalent: true, sessionNowPlaying: !!server, progressReportAccepted: reported.some(row => row.accepted === true),
+                loadfileObservation: finalReadiness && finalReadiness.loadfileObservation === 'available' ? 'available' : 'unavailable' };
         },
         async pause() { const command = await control('Pause'); if (!command.ok) return command; const paused = await until(() => playerState() && playerState().paused); const server = await until(async () => { const state = await ownSession(); return state && state.PlayState.IsPaused ? state : null; }); return { ok: !!paused && !!server, command, local: playerState(), server: sanitizedSession(server) }; },
         async visual() { await wait(20000); return { ok: !!(playerState() && playerState().item), local: playerState() }; },
         async seek() { const command = await control('Seek', { SeekPositionTicks: 600000000 }); if (!command.ok) return command; const sought = await until(() => { const state = playerState(); return state && Math.abs(state.ticks - 600000000) < 40000000; }); const server = await until(async () => { const state = await ownSession(); return state && Math.abs(state.PlayState.PositionTicks - 600000000) < 50000000 ? state : null; }); return { ok: !!sought && !!server, command, local: playerState(), server: sanitizedSession(server) }; },
         async resume() { const command = await control('Unpause'); if (!command.ok) return command; const resumed = await until(() => { const state = playerState(); return state && !state.paused && state.ticks > 620000000; }); return { ok: !!resumed, command, local: playerState() }; },
         async next() { const command = await control('NextTrack'); if (!command.ok) return command; const next = await until(() => { const state = playerState(); return state && state.item === items[1].Id && state.ticks > 10000000 ? state : null; }, 45000); const server = await until(async () => { const state = await ownSession(); return state && state.NowPlayingItem && state.NowPlayingItem.Id === items[1].Id ? state : null; }); return { ok: !!next && !!server, command, local: next, server: sanitizedSession(server) }; },
-        async stop() { const command = await control('Stop'); if (!command.ok) return command; const stopped = await until(() => !(playerState() && playerState().item)); const server = await until(async () => { const state = await ownSession(); return state && !state.NowPlayingItem ? state : null; }); const acceptedStops = reports.filter(row => row.method === 'reportPlaybackStopped' && row.accepted); const startedItems = new Set(reports.filter(row => row.method === 'reportPlaybackStart' && row.accepted).map(row => row.item)); return { ok: !!stopped && !!server && startedItems.size > 0 && [...startedItems].every(item => acceptedStops.some(row => row.item === item)), command, server: sanitizedSession(server), reports }; },
+        async stop() { const command = await control('Stop'); if (!command.ok) return command; const stopped = await until(() => !(playerState() && playerState().item)); const server = await until(async () => { const state = await ownSession(); return state && !state.NowPlayingItem ? state : null; }); const acceptedStops = reports.filter(row => row.method === 'reportPlaybackStopped' && row.accepted); const startedItems = new Set(reports.filter(row => row.method === 'reportPlaybackStart' && row.accepted).map(row => row.item)); return { ok: !!stopped && !!server && startedItems.size > 0 && [...startedItems].every(item => acceptedStops.some(row => row.item === item)), command, nowPlayingCleared: !!server && !server.NowPlayingItem, stopReportAccepted: acceptedStops.length > 0, server: sanitizedSession(server), reports }; },
         async cleanup() { if (authorizedPlayback && manager && manager._currentPlayer) await manager.stop().catch(() => { }); }
     };
 }());

@@ -1,9 +1,10 @@
 'use strict';
 
 const stages = ['play-called', 'embed-created', 'pepper-ready', 'manager-play-resolved', 'resolver-result', 'loadfile'];
-const lifecycleStages = ['app-load', 'observer-installed', 'play-called', 'createMediaElement-called', 'embed-created', 'embed-attached', 'native-bootstrap-ready', 'pepper-ready', 'manager-play-resolved', 'playing'];
+const lifecycleStages = ['app-load', 'observer-installed', 'play-called', 'createMediaElement-called', 'embed-created', 'embed-attached', 'native-bootstrap-ready', 'pepper-ready', 'core-playing', 'video-progress', 'manager-play-resolved', 'playing'];
 const allStages = new Set(stages.concat(lifecycleStages));
-const failureClasses = ['api-client-unavailable', 'playback-manager-unavailable', 'events-unavailable', 'embed-create-timeout', 'pepper-ready-timeout', 'manager-play-completion-timeout', 'resolver-result-timeout'];
+const failureClasses = ['api-client-unavailable', 'playback-manager-unavailable', 'events-unavailable', 'embed-create-timeout', 'pepper-ready-timeout', 'manager-play-completion-timeout', 'resolver-result-timeout', 'runtime-readiness-failure'];
+const readinessStatuses = ['observed-ready', 'inferred-ready-from-authoritative-state', 'not-ready', 'observer-missing', 'unavailable'];
 
 function safe(value, limit) {
     const text = String(value == null ? '' : value).replace(/[\r\n\t]/g, ' ').trim();
@@ -12,6 +13,44 @@ function safe(value, limit) {
 
 function finiteOrNull(value) {
     return value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? null : Math.round(Number(value));
+}
+
+function sanitizePepperReadiness(value) {
+    if (!value || typeof value !== 'object') return null;
+    const status = readinessStatuses.includes(value.status) ? value.status : 'unavailable';
+    const evidence = Array.isArray(value.evidence) ? value.evidence.slice(0, 16).map(row => ({
+        kind: safe(row && row.kind, 48) || 'unknown',
+        source: safe(row && row.source, 96) || 'unknown',
+        observed: row && row.observed !== false
+    })) : [];
+    return {
+        status,
+        evidence,
+        rawEventObserved: value.rawEventObserved === true || value.rawPepperReadyObserved === true,
+        normalizedObservation: safe(value.normalizedObservation, 64) || 'missing'
+    };
+}
+
+function sanitizeAssessment(value) {
+    if (!value || typeof value !== 'object') return null;
+    const classification = /^[ABCD]$/.test(String(value.classification || '')) ? String(value.classification) : null;
+    if (!classification) return null;
+    return {
+        classification,
+        reason: safe(value.reason, 96) || 'unknown',
+        playbackSucceeded: value.playbackSucceeded === true,
+        directReadyObserved: value.directReadyObserved === true,
+        stickyReadyObserved: value.stickyReadyObserved === true,
+        authoritativeReadinessConfirmed: value.authoritativeReadinessConfirmed === true,
+        observerOnlyMiss: value.observerOnlyMiss === true,
+        alternateEvidence: value.alternateEvidence === true,
+        pepperReadiness: sanitizePepperReadiness(value.pepperReadiness),
+        evidence: Array.isArray(value.evidence) ? value.evidence.slice(0, 16).map(row => ({
+            kind: safe(row && row.kind, 48) || 'unknown',
+            source: safe(row && row.source, 96) || 'unknown',
+            observed: row && row.observed !== false
+        })) : []
+    };
 }
 
 function createRecorder() {
@@ -43,8 +82,23 @@ function createRecorder() {
             nativeBootstrapReadySeen: state.nativeBootstrapReadySeen === true,
             diagnosticsHookInstalled: state.diagnosticsHookInstalled === true,
             diagnosticsReadySeen: state.diagnosticsReadySeen === true,
+            diagnosticsReadyObserved: state.diagnosticsReadyObserved === true,
+            diagnosticsReadySource: state.diagnosticsReadySource ? safe(state.diagnosticsReadySource, 48) : null,
             diagnosticsPlayingSeen: state.diagnosticsPlayingSeen === true,
             pepperAuthoritativeReady: state.pepperAuthoritativeReady === true,
+            pepperReadyRawEventSeen: state.pepperReadyRawEventSeen === true,
+            pepperReadyRawEventMs: finiteOrNull(state.pepperReadyRawEventMs),
+            stickyReadinessSupported: state.stickyReadinessSupported === true,
+            stickyReadinessObserved: state.stickyReadinessObserved === true,
+            stickyReadinessRunId: state.stickyReadinessRunId ? safe(state.stickyReadinessRunId, 64) : null,
+            stickyReadinessAt: finiteOrNull(state.stickyReadinessAt),
+            pepperReadiness: sanitizePepperReadiness(state.pepperReadiness),
+            corePlayingSeen: state.corePlayingSeen === true,
+            corePlayingMs: finiteOrNull(state.corePlayingMs),
+            videoProgressSeen: state.videoProgressSeen === true,
+            firstVideoProgressMs: finiteOrNull(state.firstVideoProgressMs),
+            firstVideoPosition: Number.isFinite(Number(state.firstVideoPosition)) ? Number(state.firstVideoPosition) : null,
+            lastVideoPosition: Number.isFinite(Number(state.lastVideoPosition)) ? Number(state.lastVideoPosition) : null,
             resolverResultSeen: state.resolverResultSeen === true,
             loadfileSeen: state.loadfileSeen === true,
             loadfileObservation: state.loadfileObservation === 'available' ? 'available' : 'unavailable',
@@ -83,6 +137,8 @@ function createRecorder() {
     function build(report) {
         const failure = report.failure || null;
         const classification = failure && failureClasses.includes(failure.failureClassification) ? failure.failureClassification : null;
+        const playStage = Array.isArray(report.stages) ? report.stages.find(row => row && row.method === 'play') : null;
+        const assessment = sanitizeAssessment(report.readinessAssessment || playStage && playStage.result && playStage.result.readinessAssessment);
         const loadfileObservation = report.readinessState && report.readinessState.loadfileObservation === 'available' ? 'available' : 'unavailable';
         const timeline = stages.map(stage => {
             const value = elapsed(report, stage);
@@ -116,7 +172,13 @@ function createRecorder() {
                 multipleObserved: report.readinessState.multipleEmbedsObserved,
                 lifecycle: report.readinessState.embedLifecycle
             } : null,
-            result: classification || (timeline.filter(row => row.status !== 'unavailable').every(row => row.status === 'seen') ? 'success' : 'incomplete'),
+            result: assessment ? 'class-' + assessment.classification.toLowerCase() : classification || (timeline.filter(row => row.status !== 'unavailable').every(row => row.status === 'seen') ? 'success' : 'incomplete'),
+            acceptanceClass: assessment ? assessment.classification : null,
+            readinessAssessment: assessment,
+            authoritativeReadinessConfirmed: assessment ? assessment.authoritativeReadinessConfirmed : false,
+            observerOnlyMiss: assessment ? assessment.observerOnlyMiss : false,
+            alternateReadinessEvidence: assessment ? assessment.alternateEvidence : false,
+            pepperReadiness: assessment && assessment.pepperReadiness ? assessment.pepperReadiness : report.readinessState && report.readinessState.pepperReadiness || null,
             failureClassification: classification,
             failureStage: failure ? safe(failure.stage || failure.reason, 48) : null,
             failureReason: failure ? safe(failure.reason, 80) : null,

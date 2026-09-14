@@ -23,6 +23,8 @@ foreach ($group in @(@{ Root='vendor/carnival'; Files=$manifest.files }, @{ Root
         if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) { throw "Vendor hash mismatch: $($entry.path)" }
     }
 }
+& node (Join-Path $root 'tools/prepare-preload.cjs') $root
+if ($LASTEXITCODE -ne 0) { throw 'Prepared preload generation failed.' }
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'vendor/carnival') | Copy-Item -Destination $destination -Recurse
 Get-ChildItem -LiteralPath (Join-Path $root 'src/electronapp') | Copy-Item -Destination (Join-Path $destination 'electronapp') -Recurse -Force

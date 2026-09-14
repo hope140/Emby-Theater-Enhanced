@@ -6,6 +6,7 @@
 /vendor/patch/
 /vendor/official-reference/
 /src/electronapp/www/
+# Generated from vendor/carnival by tools/prepare-preload.cjs; never hand-copy.
 /src/electronapp/preload.js
 /src/electronapp/scripts/windowsync.js
 /src/electronapp/package.json

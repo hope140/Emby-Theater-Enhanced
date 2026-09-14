@@ -91,6 +91,7 @@ if($InspectProfile){
 }
 $summary=[ordered]@{completed=$result.completed;error=$result.error;stage=$result.currentStage;steps=@($result.stages|ForEach-Object{[ordered]@{method=$_.method;ok=$_.result.ok}})}
 if($null -ne $result.resolver){$summary.resolver=@($result.resolver)}
+if($null -ne $result.readinessAssessment){$summary.readinessAssessment=[ordered]@{classification=$result.readinessAssessment.classification;reason=$result.readinessAssessment.reason;playbackSucceeded=$result.readinessAssessment.playbackSucceeded;authoritativeReadinessConfirmed=$result.readinessAssessment.authoritativeReadinessConfirmed;observerOnlyMiss=$result.readinessAssessment.observerOnlyMiss;pepperReadiness=$result.readinessAssessment.pepperReadiness;evidence=$result.readinessAssessment.evidence}}
 if($null -ne $result.readiness){
     $summary.readiness=[ordered]@{
         failureClassification=$result.readiness.failureClassification

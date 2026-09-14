@@ -5,6 +5,7 @@ const {app} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const readiness = require('./acceptance-readiness.cjs');
+const readinessEvidenceSource=fs.readFileSync(path.join(__dirname,'readiness-evidence.cjs'),'utf8');
 const {createTerminalWriter} = require('./acceptance-terminal-guard.cjs');
 const runtime=process.env.ETE_ACCEPT_RUNTIME;
 const output=process.env.ETE_ACCEPT_OUTPUT;
@@ -92,6 +93,7 @@ app.on('browser-window-created',(_,created)=>{
                 await evaluate(fs.readFileSync(path.join(__dirname,'../tests/acceptance-readiness.js'),'utf8')+'\nvoid 0;');
                 trace('observer-injected');
                 if(profileInspect){await inspectProfile();return;}
+                await evaluate(readinessEvidenceSource+'\nvoid 0;');
                 await evaluate('window.__eteExpectedCd2Origin='+JSON.stringify(process.env.ETE_ACCEPT_CD2_ORIGIN || '')+';window.__eteExpectedCd2LocalPrefix='+JSON.stringify(expectedCd2LocalPrefix)+';void 0;');
                 await evaluate(fs.readFileSync(path.join(__dirname,'../tests/live-acceptance-browser.js'),'utf8')+'\nvoid 0;');
                 mark('flow-injected');
@@ -107,6 +109,7 @@ app.on('browser-window-created',(_,created)=>{
                     trace('method-done='+method);
                     report.stages.push({method,result,time:new Date().toISOString()});save();
                     if(method==='inspect'&&result&&result.moduleAcquisition)report.moduleAcquisition=result.moduleAcquisition;
+                    if(method==='play'&&result&&result.readinessAssessment)report.readinessAssessment=result.readinessAssessment;
                     if(result&&result.ok===false){
                         const failure={method,reason:result.reason,failureClassification:result.failureClassification,stage:result.stage,errorType:result.errorType};
                         await end(method+'-failed',{failure,classification:failure.failureClassification||failure.reason||'acceptance-failed'});

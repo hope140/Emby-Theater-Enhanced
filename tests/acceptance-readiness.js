@@ -23,14 +23,124 @@
     var pollTimer = null;
     var lastError = null;
     var nativeBootstrapReadySeen = false;
+    var pepperReadyRawEventSeen = false;
+    var pepperReadyRawEventMs = null;
     var diagnosticsReadySeen = false;
+    var diagnosticsReadyObserved = false;
+    var diagnosticsReadySource = null;
     var diagnosticsPlayingSeen = false;
+    var stickyReadinessSupported = false;
+    var stickyReadinessObserved = false;
+    var stickyReadinessRunId = null;
+    var stickyReadinessAt = null;
+    var corePlayingSeen = false;
+    var corePlayingMs = null;
+    var firstVideoProgressMs = null;
+    var videoProgressSeen = false;
+    var firstVideoPosition = null;
+    var lastVideoPosition = null;
+    var corePlayingListener = null;
+    var currentRunId = null;
+    var currentRunStartedAt = t0;
     function elapsed() { return Date.now() - t0; }
+    function finite(value) { return typeof value === 'number' && isFinite(value); }
     function mark(stage, elapsedMs, status) {
         var name = String(stage || '');
         if (!name || name.length > 64 || marks[name]) return;
         marks[name] = true;
         timeline.push({ stage: name, elapsedMs: Math.round(typeof elapsedMs === 'number' ? elapsedMs : elapsed()), status: status || 'seen' });
+    }
+    function recordCorePlaying(source) {
+        if (corePlayingSeen) return;
+        corePlayingSeen = true;
+        corePlayingMs = elapsed();
+        mark('core-playing', corePlayingMs);
+    }
+    function recordVideoPosition(value) {
+        if (!finite(value)) return;
+        if (firstVideoPosition === null) firstVideoPosition = value;
+        lastVideoPosition = value;
+        if (!videoProgressSeen && lastVideoPosition - firstVideoPosition > 0.1) {
+            videoProgressSeen = true;
+            firstVideoProgressMs = elapsed();
+            mark('video-progress', firstVideoProgressMs);
+        }
+    }
+    function stickyState() {
+        var state;
+        try { state = window.__etePepperReadiness; } catch (error) { return null; }
+        if (!state || typeof state !== 'object') return null;
+        if (typeof state.snapshot === 'function') {
+            stickyReadinessSupported = true;
+            try { return state.snapshot(embed); } catch (error) { lastError = 'sticky-readiness-query-failed'; return null; }
+        }
+        return null;
+    }
+    function isCurrentStickyReady(snapshot) {
+        if (!snapshot || snapshot.ready !== true || !finite(Number(snapshot.readyAt))) return false;
+        if (currentRunId && snapshot.runId !== currentRunId) return false;
+        if (Number(snapshot.readyAt) < Number(currentRunStartedAt)) return false;
+        if (snapshot.readyBridgeMatches === false) return false;
+        return true;
+    }
+    function syncStickyReadiness() {
+        var snapshot = stickyState();
+        if (!snapshot || !isCurrentStickyReady(snapshot)) return;
+        stickyReadinessObserved = true;
+        stickyReadinessRunId = snapshot.runId || null;
+        stickyReadinessAt = Number(snapshot.readyAt);
+        if (!diagnosticsReadySeen) {
+            diagnosticsReadySeen = true;
+            diagnosticsReadySource = 'sticky-state';
+            mark('pepper-ready', Math.max(0, stickyReadinessAt - t0));
+        }
+    }
+    function recordDiagnostics(stage, source) {
+        var name = String(stage || '');
+        if (name === 'ready') {
+            diagnosticsReadySeen = true;
+            if (source === 'observer-wrapper') diagnosticsReadyObserved = true;
+            diagnosticsReadySource = source || diagnosticsReadySource || 'unknown';
+            mark('pepper-ready');
+        }
+        if (name === 'playing') {
+            diagnosticsPlayingSeen = true;
+            mark('playing');
+        }
+    }
+    function beginRun(runId) {
+        currentRunId = String(runId || ('run-' + Date.now()));
+        currentRunStartedAt = Date.now();
+        try {
+            var state = window.__etePepperReadiness;
+            if (state && typeof state.beginRun === 'function') {
+                stickyReadinessSupported = true;
+                state.beginRun(currentRunId, currentRunStartedAt);
+            }
+        } catch (error) { lastError = 'sticky-readiness-reset-failed'; }
+        ['play-called', 'embed-created', 'embed-attached', 'native-bootstrap-ready', 'pepper-ready', 'manager-play-resolved', 'resolver-result', 'loadfile', 'core-playing', 'video-progress', 'playing'].forEach(function (stage) {
+            delete marks[stage];
+        });
+        timeline = timeline.filter(function (row) {
+            return ['play-called', 'embed-created', 'embed-attached', 'native-bootstrap-ready', 'pepper-ready', 'manager-play-resolved', 'resolver-result', 'loadfile', 'core-playing', 'video-progress', 'playing'].indexOf(row.stage) < 0;
+        });
+        nativeBootstrapReadySeen = false;
+        pepperReadyRawEventSeen = false;
+        pepperReadyRawEventMs = null;
+        diagnosticsReadySeen = false;
+        diagnosticsReadyObserved = false;
+        diagnosticsReadySource = null;
+        diagnosticsPlayingSeen = false;
+        stickyReadinessObserved = false;
+        stickyReadinessRunId = null;
+        stickyReadinessAt = null;
+        corePlayingSeen = false;
+        corePlayingMs = null;
+        firstVideoProgressMs = null;
+        videoProgressSeen = false;
+        firstVideoPosition = null;
+        lastVideoPosition = null;
+        return currentRunId;
     }
     function embedNodes() {
         try {
@@ -132,11 +242,21 @@
         var type = message && typeof message.type === 'string' ? message.type : 'unknown';
         var data = message && message.data;
         var command = Array.isArray(data) && typeof data[0] === 'string' ? data[0].toLowerCase() : null;
-        if (type === 'ready') { nativeBootstrapReadySeen = true; mark('native-bootstrap-ready'); }
+        if (type === 'ready') {
+            nativeBootstrapReadySeen = true;
+            pepperReadyRawEventSeen = true;
+            pepperReadyRawEventMs = elapsed();
+            mark('native-bootstrap-ready');
+        }
+        if (type === 'property_change' && data && typeof data.name === 'string') {
+            if (data.name === 'core-idle' && data.value === false) recordCorePlaying('embed-property');
+            if (data.name === 'time-pos') recordVideoPosition(data.value);
+        }
         if (command === 'loadfile') mark('loadfile');
         if (messages.length < 32) messages.push({ direction: direction, type: type.slice(0, 32), command: command && command.slice(0, 32) });
     }
     function onEmbedMessage(event) { try { rememberMessage('in', event && event.data); } catch (error) { lastError = 'embed-message-error'; } }
+    function onCorePlaying() { recordCorePlaying('window-event'); }
     function findEmbed() {
         try { return document.querySelector('embed[type="application/x-mpvjs"]'); } catch (error) { return null; }
     }
@@ -162,6 +282,7 @@
                 embed.postMessage = postMessageWrapper;
             }
         } catch (error) { lastError = 'embed-command-hook-failed'; }
+        syncStickyReadiness();
     }
     function installDiagnosticsHook() {
         var current = window.enhancedDiagnostics;
@@ -171,9 +292,7 @@
         try {
             originalDiagnostics = current;
             diagnosticsWrapper = function (bridge, stage) {
-                var name = String(stage || '');
-                if (name === 'ready') { diagnosticsReadySeen = true; mark('pepper-ready'); }
-                if (name === 'playing') { diagnosticsPlayingSeen = true; mark('playing'); }
+                recordDiagnostics(stage, 'observer-wrapper');
                 return originalDiagnostics.apply(this, arguments);
             };
             diagnosticsWrapper.__eteReadinessHook = true;
@@ -194,22 +313,43 @@
             console.log = consoleWrapper;
         } catch (error) { lastError = 'console-hook-failed'; }
     }
-    function poll() { try { installDiagnosticsHook(); installResolverHook(); attachEmbed(); } catch (error) { lastError = 'observer-poll-failed'; } }
+    function poll() { try { installDiagnosticsHook(); installResolverHook(); attachEmbed(); syncStickyReadiness(); } catch (error) { lastError = 'observer-poll-failed'; } }
     function install() {
         mark('observer-installed', installedAt - t0);
         installEmbedObserver();
+        try {
+            if (typeof window.addEventListener === 'function') {
+                corePlayingListener = onCorePlaying;
+                window.addEventListener('core-playing', corePlayingListener);
+            }
+        } catch (error) { lastError = 'core-playing-observer-failed'; }
         installResolverHook();
         poll();
         pollTimer = setInterval(poll, 50);
     }
     function snapshot() {
         scanEmbedState();
+        syncStickyReadiness();
+        var pepperReadinessStatus = diagnosticsReadyObserved ? 'observed-ready' : stickyReadinessObserved ? 'inferred-ready-from-authoritative-state' : stickyReadinessSupported ? 'not-ready' : 'observer-missing';
+        var pepperReadinessEvidence = [];
+        if (pepperReadyRawEventSeen) pepperReadinessEvidence.push({ kind: 'pepper-ready-raw-event', source: 'embed message type ready' });
+        if (diagnosticsReadyObserved) pepperReadinessEvidence.push({ kind: 'pepper-ready', source: 'acceptance observer wrapper' });
+        if (stickyReadinessObserved) pepperReadinessEvidence.push({ kind: 'pepper-ready', source: 'prepared preload sticky state' });
         return {
             version: 1, installedAt: installedAt, installElapsedMs: installedAt - t0, elapsedMs: elapsed(),
             timeline: timeline.map(function (row) { return { stage: row.stage, elapsedMs: row.elapsedMs, status: row.status }; }),
             messageSummary: messages.slice(), nativeBootstrapReadySeen: nativeBootstrapReadySeen,
+            pepperReadyRawEventSeen: pepperReadyRawEventSeen, pepperReadyRawEventMs: pepperReadyRawEventMs,
             diagnosticsHookInstalled: !!diagnosticsWrapper, diagnosticsReadySeen: diagnosticsReadySeen,
+            diagnosticsReadyObserved: diagnosticsReadyObserved, diagnosticsReadySource: diagnosticsReadySource,
             diagnosticsPlayingSeen: diagnosticsPlayingSeen, pepperAuthoritativeReady: diagnosticsReadySeen,
+            stickyReadinessSupported: stickyReadinessSupported, stickyReadinessObserved: stickyReadinessObserved,
+            stickyReadinessRunId: stickyReadinessRunId, stickyReadinessAt: stickyReadinessAt,
+            pepperReadiness: { status: pepperReadinessStatus, evidence: pepperReadinessEvidence,
+                rawEventObserved: pepperReadyRawEventSeen, normalizedObservation: diagnosticsReadyObserved ? 'direct-product-diagnostics' : stickyReadinessObserved ? 'sticky-authoritative-state' : 'missing' },
+            corePlayingSeen: corePlayingSeen, corePlayingMs: corePlayingMs,
+            videoProgressSeen: videoProgressSeen, firstVideoProgressMs: firstVideoProgressMs,
+            firstVideoPosition: firstVideoPosition, lastVideoPosition: lastVideoPosition,
             resolverResultSeen: !!marks['resolver-result'], loadfileSeen: !!marks.loadfile,
             loadfileObservation: marks.loadfile ? 'available' : 'unavailable', lastError: lastError,
             embedCount: knownEmbeds.length, connectedEmbedCount: currentEmbedCount(),
@@ -224,6 +364,7 @@
     function cleanup() {
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         if (embedObserver) { try { embedObserver.disconnect(); } catch (error) { } embedObserver = null; }
+        if (corePlayingListener && typeof window.removeEventListener === 'function') { try { window.removeEventListener('core-playing', corePlayingListener); } catch (error) { } corePlayingListener = null; }
         if (console.log === consoleWrapper && originalConsoleLog) { try { console.log = originalConsoleLog; } catch (error) { } }
         if (window.enhancedDiagnostics === diagnosticsWrapper && originalDiagnostics) { try { window.enhancedDiagnostics = originalDiagnostics; } catch (error) { } }
         if (embed) {
@@ -231,7 +372,7 @@
             if (embed.postMessage === postMessageWrapper && originalPostMessage) { try { embed.postMessage = originalPostMessage; } catch (error) { } }
         }
     }
-    var api = { version: 1, mark: mark, snapshot: snapshot, cleanup: cleanup, observer: { install: install } };
+    var api = { version: 1, mark: mark, beginRun: beginRun, snapshot: snapshot, cleanup: cleanup, observer: { install: install } };
     window.__eteReadiness = api;
     install();
     window.__eteInstallResult = 'installed';

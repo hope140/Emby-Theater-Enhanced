@@ -6,6 +6,7 @@ const childProcess = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const preloadPreparation = require('../tools/prepare-preload.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const tool = path.join(repoRoot, 'tools', 'runtime-provenance.cjs');
@@ -17,12 +18,15 @@ function writeFile(file, content) {
 }
 
 function createFixture(root) {
+    const vendorPreload = "const { ipcRenderer } = require('electron');\r\nwindow.ipc = ipcRenderer;\r\nconst fs = require('fs');\r\nwindow.fs = fs;\r\nconst os = require('os');\r\nwindow.dirName = os.tmpdir();\r\nwindow.appdata = process.env.APPDATA;\r\n";
     writeFile(path.join(root, 'vendor', 'runtime-manifest.json'), JSON.stringify({
         baseline: 'provenance-test-fixture',
         files: [],
         patchFiles: []
     }));
+    writeFile(path.join(root, 'vendor', 'carnival', 'electronapp', 'preload.js'), vendorPreload);
     writeFile(path.join(root, 'src', 'electronapp', 'some-normal-file.js'), 'module.exports = "normal";\n');
+    writeFile(path.join(root, 'src', 'electronapp', 'preload.js'), preloadPreparation.buildPreparedPreload(vendorPreload));
     writeFile(path.join(root, 'src', 'electronapp', 'www', 'app.js'), 'const app = "clean";\n');
     writeFile(path.join(root, 'src', 'electronapp', 'www', 'modules', 'common', 'playback', 'playbackmanager.js'), 'const playback = true;\n');
     writeFile(path.join(root, 'src', 'electronapp', 'package.json'), '{"name":"fixture"}\n');
@@ -30,12 +34,18 @@ function createFixture(root) {
     writeFile(path.join(root, 'tools', 'Start-Enhanced.cmd'), '@echo off\r\n');
     writeFile(path.join(root, 'tools', 'patch-external-player-registration.cjs'), 'generator: external-player-registration\n');
     writeFile(path.join(root, 'tools', 'patch-playbackmanager.cjs'), 'generator: playbackmanager\n');
+    writeFile(path.join(root, 'tools', 'prepare-preload.cjs'), fs.readFileSync(
+        path.join(repoRoot, 'tools', 'prepare-preload.cjs'), 'utf8'
+    ));
     writeFile(path.join(root, 'tools', 'build.ps1'), 'generator: package-metadata\n');
 }
 
 function createRuntime(root, name) {
     const runtime = path.join(root, name);
     writeFile(path.join(runtime, 'electronapp', 'some-normal-file.js'), 'module.exports = "normal";\n');
+    writeFile(path.join(runtime, 'electronapp', 'preload.js'), fs.readFileSync(
+        path.join(root, 'src', 'electronapp', 'preload.js'), 'utf8'
+    ));
     writeFile(path.join(runtime, 'electronapp', 'www', 'app.js'), 'const app = "patched";\n');
     writeFile(path.join(runtime, 'electronapp', 'www', 'modules', 'common', 'playback', 'playbackmanager.js'), 'const playback = true;\n');
     writeFile(path.join(runtime, 'electronapp', 'package.json'), '{"name":"runtime"}\n');
@@ -110,7 +120,15 @@ test('runtime provenance validates the app overlay with vendor fallback when sou
         const appOverlay = manifest.buildOverlays.find(entry => entry.runtimePath === 'electronapp/www/app.js');
         assert.equal(appOverlay.sourcePresent, false);
         assert.equal(appOverlay.sourceSha256, null);
+        const prepared = manifest.preparedArtifacts.find(entry => entry.preparedPath === 'src/electronapp/preload.js');
+        assert.equal(prepared.category, 'prepared-workspace-artifact');
+        assert.equal(prepared.preparedSha256, prepared.runtimeSha256);
         assert.equal(runProvenance('validate', root, runtime).exitCode, 0);
+
+        writeFile(path.join(root, 'src', 'electronapp', 'preload.js'), 'tampered\n');
+        const tampered = runProvenance('validate', root, runtime);
+        assert.equal(tampered.exitCode, 1);
+        assert.equal(tampered.report.errors.includes('prepared-artifact-input-missing'), true);
     } finally {
         fs.rmSync(root, {recursive: true, force: true});
     }

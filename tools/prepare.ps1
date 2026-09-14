@@ -17,4 +17,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $root 'vendor/carnival'))) {
 if (-not (Test-Path -LiteralPath (Join-Path $root 'vendor/patch'))) {
     Expand-Archive -LiteralPath (Join-Path $root $manifest.archives[1].pattern) -DestinationPath (Join-Path $root 'vendor/patch')
 }
-Write-Output 'Vendor inputs prepared. build.ps1 checks every vendor file before building.'
+& node (Join-Path $PSScriptRoot 'prepare-preload.cjs') $root
+if ($LASTEXITCODE -ne 0) { throw 'Prepared preload generation failed.' }
+Write-Output 'Vendor inputs and prepared workspace artifacts are ready. build.ps1 checks every input before building.'
