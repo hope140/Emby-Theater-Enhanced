@@ -1,8 +1,19 @@
 # 开发日志
 
+## 2026-09-14 — External Player registration portability fix
+
+Batch 1 review 的最后 blocker 是 Electron External Player registration 只存在于 ignored Web snapshot 的本机修改。本轮新增 `tools/patch-external-player-registration.cjs`，以精确 registration pattern 做可重复、幂等且 fail-closed 的 patch；`tools/build.ps1` 在 source overlay 后执行它，再移除 `electronapp/www/modules/externalplayer`。Android `native/android/externalplayer` 和其它平台分支保持不变。
+
+`runtime-provenance.cjs` 将 `electronapp/www/app.js` 登记为受控 overlay，记录 generator/runtime/source 状态；source app.js 存在时验证 source/runtime/generator hash，source app.js 缺失时验证 vendor fallback runtime overlay，且不降低其它产品 scope。新增 active/already-clean/platform-preservation/malformed-duplicate patch tests，以及 source sentinel/external-player exclusion 和 normal missing-runtime failure regression。未修改播放代码、Session、main IPC、shell、CEC、vendor 或用户数据，未重新执行真实 acceptance。
+
+Model Tier: 1
+Model: current Codex session
+Reason: the change is a narrow tracked build/provenance contract with targeted fixtures; playback and Session behavior remain out of scope
+Escalated: no
+
 ## 2026-09-14 — Provenance portability blocker fix
 
-Batch 1 review 发现 External Player frontend 位于 ignored `src/electronapp/www/`，本机删除 41 个文件不会同步到其它构建机；若 provenance 继续枚举它们，而 build runtime 已排除目录，另一台机器会构建失败。本轮只修该 contract：`runtime-provenance.cjs` 以精确 `src/electronapp/www/modules/externalplayer/` 前缀做 intentional source exclusion，并在 `validatedProductScope.excludedSourcePrefixes` 中记录；write/validate 共用同一 exclusion，其他非排除 source file 的缺失仍 fail。
+Batch 1 review 发现 External Player frontend 位于 ignored `src/electronapp/www/`，本机删除 41 个文件不会同步到其它构建机；若 provenance 继续枚举它们，而 build runtime 已排除目录，另一台机器会构建失败。本轮只修该 contract：`runtime-provenance.cjs` 以精确 `src/electronapp/www/modules/externalplayer/` 前缀做 intentional source exclusion，并在 `validatedProductScope.excludedSourcePrefixes` 中记录；同时将 `electronapp/www/app.js` 登记为由 `patch-external-player-registration.cjs` 控制的 build overlay，只关闭 Electron registration。write/validate 共用同一 exclusion/overlay contract，其他非排除 source file 的缺失仍 fail。
 
 Local audit workspace：本机曾删除 41 个 ignored snapshot files。Durable repository/product behavior：provenance contract 与 `tools/build.ps1` exclusion 保证该 frontend 不进入 fresh Enhanced runtime，无论 ignored snapshot 是否存在。新增 targeted provenance regression，未修改播放代码、Session、main IPC、shell、CEC、vendor 或用户数据；未重新执行真实 acceptance。
 

@@ -10,7 +10,7 @@
 
 主要结论：
 
-- External Player 的默认注册已经关闭，维护版模块的构造函数此前提供了 `canPlay=false`、空路由和拒绝播放的防护；Batch 1 已将本地 ignored snapshot 的 41 个前端文件物理删除，并在 fresh runtime 中确认 0 entries。vendor 原件仍只读保留。
+- External Player 的默认注册已关闭，维护版模块此前提供的防护与 41 个本地 ignored frontend 文件均已处理；Batch 1 现在还由 tracked build-time patch 在 fresh runtime 中强制移除 Electron registration，source snapshot 存在与否结果一致。vendor 原件仍只读保留。
 - `mpvPosEvent`、`mpv-socket` named pipe 及其 `mpvPos` 回传只有 External Player 旧实现消费，且消费代码位于当前防护壳的不可达代码之后，具备与 External Player 同批拆除的条件。
 - `src/electronapp/shell.js` 不能整体删除。`openUrl` 仍被 IAP、元数据编辑、注册服务和通用 `emby-button` 使用；仅 `canExec`、`exec`、`close` 及 main process 的 `shellstart` / `shellclose` 进程管理分支属于外置播放器遗留候选。
 - CEC 不是死代码。Electron 启动时动态加载 `plugins/cec.js`，插件构造时请求 `electroncec://start`，main process 会加载 `cec/cec.js` 并连接输入事件。CEC 应 KEEP；driver installer、重复二进制别名和普通启动时的可执行文件参数仍需额外证据。
@@ -25,6 +25,8 @@ Batch 1 review 发现 ignored Web snapshot 会造成 provenance 随开发机状�
 
 Local audit workspace：本机曾删除 41 个 ignored snapshot files。
 Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` 共同保证该 frontend 无论本地 ignored snapshot 是否存在，都不会进入 fresh Enhanced runtime；vendor 原件仍只读保留。
+
+本轮最后的 portability 修复新增 `tools/patch-external-player-registration.cjs`，只处理 `responses.electron && list.push("modules/externalplayer/plugin")` 这一 Electron registration；`tools/build.ps1` 在 source overlay 后执行它，再排除 frontend directory。`electronapp/www/app.js` 在 source scope 中按受控 build overlay 记录 generator/runtime hash；source app.js 缺失时以 vendor fallback runtime overlay 记录 `sourcePresent=false`，不把整个 app.js 排除出 provenance。
 
 ## Audit Basis and Evidence Rules
 
@@ -74,10 +76,10 @@ Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` �
 
 - 路径：`src/electronapp/www/modules/externalplayer/**`，本地 ignored snapshot 中 41 个文件、77,725 bytes，已逐文件删除。
 - vendor 原始版本为 41 个文件、约 77,251 bytes；其中包含 plugin、两个 HTML、两个 controller 和 36 个 locale 文件。
-- `src/electronapp/www/app.js` 中失效的 Electron registration remnant 已从当前本地 snapshot 移除。
+- `src/electronapp/www/app.js` 中失效的 Electron registration remnant 已从当前本地 snapshot 移除；tracked `patch-external-player-registration.cjs` 负责跨工作区重复关闭该 registration。
 - `pluginManager` 只有在插件实际加载后才调用 `getRoutes`；当前 plugin 文件已不存在，旧 route/controller 也随目录删除。
 - `src/electronapp/main.js:628-655` 只从 `electronapp/plugins` 顶层枚举 `.js` 形成 `startInfo.plugins`；External Player 位于 `www/modules`，不在默认动态插件目录。当前顶层插件是 CEC 和 libmpv。
-- fresh runtime 的 `electronapp/www/modules/externalplayer/**` entries 为 0。
+- fresh runtime 的 `electronapp/www/modules/externalplayer/**` entries 为 0，`electronapp/www/app.js` 的 registration 由受控 overlay 生成并验证。
 
 判定：**REMOVED**。`tools/build.ps1` 的 exclusion 防止 vendor 全量复制重新带回该目录；vendor 原件未修改。
 
@@ -221,7 +223,7 @@ main 只接受一个 `cecExePath`，但 opaque host、测试 runner 和手工脚
 
 ```text
 默认 Electron app.js registration
-    └─ Batch 1 已移除当前 snapshot 的 registration remnant
+    └─ tracked build-time patch removes it in fresh runtime
 
 vendor 中的旧 plugin（只读基线；fresh Enhanced runtime 排除）
     ├─ externalplayer/plugin.js
@@ -233,7 +235,7 @@ vendor 中的旧 plugin（只读基线；fresh Enhanced runtime 排除）
     └─ getRoutes → externalplayer.html / externalplayers.html + controllers
 ```
 
-Batch 1 后，当前可维护 snapshot 和 fresh runtime 都没有该 plugin 文件或 route；vendor 中的旧文本仅作为只读来源保留。旧 chain 的 main-process/helper 部分没有在本轮删除。
+Batch 1 后，当前可维护 snapshot 和 fresh runtime 都没有该 plugin 文件或 route；Electron registration 由 tracked build-time patch 在 source/vendor 两种输入上统一关闭。vendor 中的旧文本仅作为只读来源保留，旧 chain 的 main-process/helper 部分没有在本轮删除。
 
 ### 共享依赖拆分
 
@@ -316,7 +318,7 @@ CEC 当前是实际可到达的 optional feature：
 - `tools/build.ps1:11-24` 校验 `vendor/carnival` 的 1009 个文件和 `vendor/patch` 的 51 个文件。
 - `tools/build.ps1:27` 仍将 `vendor/carnival` 根目录整体复制到 runtime。
 - `tools/build.ps1:28` 再将 `src/electronapp` 整体覆盖到 `electronapp`，包括本地 ignored Web snapshot、preload 和 package metadata。
-- `tools/build.ps1:29-36` 在 dependency/provenance 步骤前排除 `electronapp/www/modules/externalplayer`，随后复制 production dependency closure、应用 PlaybackManager overlay，并只从 patch payload 选取 `libmpv/mpv-1.dll`。
+- `tools/build.ps1:29-43` 在 source overlay 后先执行 `patch-external-player-registration.cjs`，再排除 `electronapp/www/modules/externalplayer`，随后复制 production dependency closure、应用 PlaybackManager overlay，并只从 patch payload 选取 `libmpv/mpv-1.dll`。
 - `installer/EmbyTheaterEnhanced.iss:32-33` 递归复制 runtime 全部内容。
 
 因此当前 packaging residue 不是“代码是否被 require”就能消失的；每项必须在新的 runtime allowlist/exclusion policy 中明确表达。
@@ -364,7 +366,7 @@ Windows only 是 near-term product priority，不是删除所有非 Windows 分�
 1. 从本地 ignored snapshot 删除 `www/modules/externalplayer/**` 的 41 个文件。
 2. 从 `tools/build.ps1` 增加纯 frontend runtime exclusion，避免 vendor 全量 copy 恢复该目录。
 3. 移除当前只读取该 plugin 文件的 obsolete 单测；未修改测试框架。
-4. 从当前 snapshot 移除失效的 Electron External Player registration remnant。
+4. 增加 tracked build-time registration patch，并从当前 snapshot 移除失效的 Electron External Player registration remnant。
 5. 保留 shared settings/locale、PlaybackManager guard、main IPC、shell process branch、CEC、external/、vendor helper 和所有 Foundation 资产。
 
 结果：41 个本地 source 文件删除，fresh runtime 0 个对应 entries；不修改 `vendor/carnival` 原件。
@@ -410,12 +412,12 @@ Batch 3 需要独立的许可/来源、host、安装包和跨平台证据，不�
 
 ### Batch 1 Verification Record
 
-1. `npm test`：56/56 PASS；obsolete direct-load test 已删除。
-2. fresh runtime provenance：PASS，779 scope entries；`package.ps1 -VerifyOnly`：PASS，2,116 payload files。
+1. `npm test`：62/62 PASS；obsolete direct-load test 已删除，新增 provenance/registration tests。
+2. fresh runtime provenance：PASS，scope 仍覆盖全部非排除产品文件；app.js build overlay 的 generator/runtime/source 状态已记录并验证；`package.ps1 -VerifyOnly`：PASS。
 3. deleted path entries：0；CEC、libmpv、preload、resolver、CD2 和 PlaybackManager 文件存在。
-4. JavaScript syntax：451 files PASS；PowerShell syntax：11 files PASS；`git diff --check` PASS。
-5. 唯一一次 bounded real acceptance 的 inspect/select/play/pause/seek/resume/stop、Session/reporting 和 exact-root cleanup 均 PASS；runner completed，residual=0。
-6. main IPC、shell process slice、CEC、external/、vendor helper 和历史文档未在 Batch 1 改动。
+4. app-registration targeted tests：active/already-clean/platform-preservation/malformed-duplicate 全部 PASS；source app.js fallback provenance PASS。
+5. stale ignored app.js portability build：registration 关闭、frontend directory 不存在、Android branch 保留、provenance/package verify PASS，source sentinel/app state 已恢复。
+6. JavaScript syntax：454 files PASS；PowerShell syntax：11 files PASS；`git diff --check` PASS。main IPC、shell process slice、CEC、external/、vendor helper 和历史文档未在 Batch 1 改动。
 
 ## Final Audit Summary
 
@@ -435,7 +437,7 @@ KEEP:
 
 REMOVED:
 - External Player frontend/plugin module, route/controllers and module locales (41 files)
-- Disabled Electron registration remnant in current ignored Web snapshot
+- Disabled Electron registration remnant in current ignored Web snapshot; tracked build-time patch now enforces the same result on stale/vendor fallback input
 
 DELETE CANDIDATE:
 - main mpvPosEvent / mpv-socket producer and unreachable legacy consumer
@@ -457,7 +459,7 @@ UNKNOWN:
 - dynamic plugin injection and managed host sidecar payload
 
 External Player:
-- current registration: removed from current ignored snapshot; fresh runtime contains no External Player frontend path
+- current registration: tracked build-time patch disables the Electron registration; fresh runtime contains no External Player frontend path regardless of ignored snapshot state
 - remaining files: shared settings/locale residue only; vendor baseline remains read-only
 - shared dependencies: shell.openUrl, generic preload IPC, filesystem, PlaybackManager guards
 - deletion readiness: frontend/plugin layer REMOVED; main/helper and shared settings residue remains

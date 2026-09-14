@@ -18,6 +18,7 @@
 |---|---|---|
 | `www/modules/externalplayer/**` | 外置播放器 plugin、两个设置页、两个 controller、模块 locale | 本地 ignored Web snapshot 中 41 个文件已删除；fresh runtime 不再包含该目录 |
 | `www/app.js` 的 Electron externalplayer registration | `responses.electron && list.push("modules/externalplayer/plugin")` | 当前本地 snapshot 的失效 registration remnant 已移除；Android 平台分支仍按平台兼容边界保留 |
+| `tools/patch-external-player-registration.cjs` | stale/vendor `app.js` 的 Electron registration | tracked build-time patch 只关闭该 Electron registration；already-clean 状态幂等通过，Android branch 保留 |
 | External Player route/controller surface | `externalplayer.html`、`externalplayers.html` 及 `getRoutes` | 随模块表层删除；无当前 route 或 controller consumer |
 | `tools/build.ps1` | vendor 全量复制会带入旧前端 | 增加纯 External Player runtime exclusion；不修改 vendor 原件 |
 | `tests/diagnostics.test.cjs` 的 disabled-plugin direct-load case | 直接读取已删除 plugin 文件 | 作为 obsolete test 删除；未引入新测试框架 |
@@ -25,7 +26,7 @@
 这 41 个 Web 文件位于 `.gitignore` 的本地 snapshot，不作为公开 Git 文件提交。Git 提交记录的是生成 runtime 的排除规则和 obsolete test 删除；`vendor/carnival` 仍保留原始 41 文件，作为只读来源基线。
 
 Local audit workspace：本机物理删除了 41 个 ignored snapshot files。
-Durable repository/product behavior：`runtime-provenance.cjs` 的精确 source exclusion 与 `tools/build.ps1` 的 runtime exclusion 共同保证 External Player frontend 不会进入 fresh Enhanced runtime，不依赖开发机是否手工删除 snapshot。
+Durable repository/product behavior：`runtime-provenance.cjs` 的精确 source exclusion、`patch-external-player-registration.cjs` 的 app.js overlay 和 `tools/build.ps1` 的 runtime exclusion 共同保证 External Player frontend 及 Electron registration 不会进入 fresh Enhanced runtime，不依赖开发机是否手工删除 snapshot。
 
 本轮 portability 修复已把该 exclusion 写入 provenance manifest，并用 source sentinel 验证存在/不存在两种机器状态的 scope 一致性。
 
@@ -74,12 +75,13 @@ Batch 1 删除前重新检查了 `rg`、AMD `require`、plugin registration、ro
 
 验证 runtime：`dist/EmbyTheaterEnhanced-0.1.1-batch1-after-cleanup-adc8758`。
 
-- runtime provenance：PASS，产品 scope 779 entries
+- runtime provenance：PASS，产品 scope 779 entries；app.js 为受控 build overlay，generator/runtime/source 状态可验证
+- app.js provenance relation：`electronapp/www/app.js` 为受控 build overlay；generator hash/runtime hash 已记录并验证，source app.js 缺失时允许 vendor fallback 并记录 `sourcePresent=false`
 - deleted External Player entries：0
 - `package.ps1 -VerifyOnly`：PASS，2,116 个 payload files
 - Foundation 文件：embedded libmpv、PlaybackManager、STRM resolver、CD2 resolver/service、preload 均存在
-- 自动测试：56/56 PASS
-- JavaScript syntax：451 files PASS
+- 自动测试：62/62 PASS
+- JavaScript syntax：454 files PASS
 - PowerShell syntax：11 files PASS
 - `git diff --check`：PASS
 

@@ -26,6 +26,9 @@ foreach ($group in @(@{ Root='vendor/carnival'; Files=$manifest.files }, @{ Root
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'vendor/carnival') | Copy-Item -Destination $destination -Recurse
 Get-ChildItem -LiteralPath (Join-Path $root 'src/electronapp') | Copy-Item -Destination (Join-Path $destination 'electronapp') -Recurse -Force
+# Disable only the Electron External Player registration in either source or vendor app.js.
+& node (Join-Path $root 'tools/patch-external-player-registration.cjs') (Join-Path $destination 'electronapp/www/app.js')
+if ($LASTEXITCODE -ne 0) { throw 'External Player registration patch failed.' }
 # The legacy External Player frontend is intentionally absent from Enhanced runtime.
 # Keep vendor/carnival read-only; exclude the copied path from this fresh output.
 $externalPlayerPath = Join-Path $destination 'electronapp/www/modules/externalplayer'

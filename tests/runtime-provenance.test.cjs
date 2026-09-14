@@ -23,13 +23,22 @@ function createFixture(root) {
         patchFiles: []
     }));
     writeFile(path.join(root, 'src', 'electronapp', 'some-normal-file.js'), 'module.exports = "normal";\n');
+    writeFile(path.join(root, 'src', 'electronapp', 'www', 'app.js'), 'const app = "clean";\n');
+    writeFile(path.join(root, 'src', 'electronapp', 'www', 'modules', 'common', 'playback', 'playbackmanager.js'), 'const playback = true;\n');
+    writeFile(path.join(root, 'src', 'electronapp', 'package.json'), '{"name":"fixture"}\n');
     writeFile(path.join(root, 'tools', 'Start-Enhanced.ps1'), 'param()\n');
     writeFile(path.join(root, 'tools', 'Start-Enhanced.cmd'), '@echo off\r\n');
+    writeFile(path.join(root, 'tools', 'patch-external-player-registration.cjs'), 'generator: external-player-registration\n');
+    writeFile(path.join(root, 'tools', 'patch-playbackmanager.cjs'), 'generator: playbackmanager\n');
+    writeFile(path.join(root, 'tools', 'build.ps1'), 'generator: package-metadata\n');
 }
 
 function createRuntime(root, name) {
     const runtime = path.join(root, name);
     writeFile(path.join(runtime, 'electronapp', 'some-normal-file.js'), 'module.exports = "normal";\n');
+    writeFile(path.join(runtime, 'electronapp', 'www', 'app.js'), 'const app = "patched";\n');
+    writeFile(path.join(runtime, 'electronapp', 'www', 'modules', 'common', 'playback', 'playbackmanager.js'), 'const playback = true;\n');
+    writeFile(path.join(runtime, 'electronapp', 'package.json'), '{"name":"runtime"}\n');
     writeFile(path.join(runtime, 'Start-Enhanced.ps1'), 'param()\n');
     writeFile(path.join(runtime, 'Start-Enhanced.cmd'), '@echo off\r\n');
     return runtime;
@@ -84,6 +93,24 @@ test('runtime provenance excludes the exact legacy subtree without weakening nor
         assert.equal(normalMismatch.report.errors.includes(
             'runtime-file-missing:electronapp/some-normal-file.js'
         ), true);
+    } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+    }
+});
+
+test('runtime provenance validates the app overlay with vendor fallback when source app.js is absent', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ete-provenance-fallback-'));
+    try {
+        createFixture(root);
+        fs.rmSync(path.join(root, 'src', 'electronapp', 'www', 'app.js'));
+        const runtime = createRuntime(root, 'runtime-vendor-fallback');
+        const written = runProvenance('write', root, runtime);
+        assert.equal(written.exitCode, 0);
+        const manifest = JSON.parse(fs.readFileSync(path.join(runtime, 'runtime-provenance.json'), 'utf8'));
+        const appOverlay = manifest.buildOverlays.find(entry => entry.runtimePath === 'electronapp/www/app.js');
+        assert.equal(appOverlay.sourcePresent, false);
+        assert.equal(appOverlay.sourceSha256, null);
+        assert.equal(runProvenance('validate', root, runtime).exitCode, 0);
     } finally {
         fs.rmSync(root, {recursive: true, force: true});
     }
