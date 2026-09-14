@@ -172,3 +172,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/accept-live.ps1 -Autho
 ## 真实 Emby 测试卡
 
 2026-09-13 用户授权任意库内样本，说明全库 STRM，并将 WatchTogether 验收口径确认为后台控制正常。真实测试已通过，详见 LIVE_ACCEPTANCE.md。普通文件无库内样本，不伪装成已做实服验证；双客户端同步精度未单独测试。
+
+## 2026-09-14 Pepper readiness diagnosis
+
+当前 main 的验证 runtime 为 `EmbyTheaterEnhanced-0.1.1-readiness-diagnosis-e9e2ad2`，由 HEAD `e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c` 构建，启动前 full provenance 校验通过（820/820 scope entries）。三次 timing run 使用同一 runtime 和同一 commit：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/readiness-acceptance.ps1 -AuthorizedLivePlayback -Methods inspect,select,play,stop -RuntimeName EmbyTheaterEnhanced-0.1.1-readiness-diagnosis-e9e2ad2 -RunPrefix readiness-A -TimeoutMs 180000
+```
+
+将 `RunPrefix` 改为 `readiness-B`、`readiness-C`，其余参数不变。三次均 provenance=passed、acceptance=success、runner=completed、cleanup=verified-clean、residual=0。observer 额外记录 embed creation observation、attached/disconnected、unique count、recreation/duplicate 以及 lifecycle timing；不修改产品 instrumentation。核心结论是 `play→embed=4535–5996ms`、`embed→authoritative ready=2–3ms`，所以当前只能确认主要抖动在 embed 前置层，不能确认其单一根因。loadfile outgoing 仍为 `unavailable` observability gap，不作为 gate。完整脱敏结果见 `docs/PEPPER_READINESS_DIAGNOSIS.md`。

@@ -78,7 +78,7 @@ window.eteAcceptance = (function () {
         if (hasPlaybackManager(direct)) return { ok: true, value: direct, status: moduleStatus('window.playbackManager', 'available') };
         const named = globalValue('PlaybackManager');
         if (hasPlaybackManager(named)) return { ok: true, value: named, status: moduleStatus('window.PlaybackManager', 'available') };
-        const loader = typeof require === 'function' ? require : null;
+        const loader = typeof window.require === 'function' ? window.require : (typeof require === 'function' ? require : null);
         if (!loader) return { ok: false, status: moduleStatus('amd-require:playbackManager', 'unavailable') };
         return await new Promise(resolve => {
             let settled = false;

@@ -7,7 +7,7 @@ param(
     [switch]$ValidationOnly,
     [switch]$Synthetic,
     [switch]$SyntheticCimUnavailable,
-    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch', 'pid-reuse-descendant', 'cim-unavailable')]
+    [ValidateSet('timeout', 'success', 'failure', 'identity-mismatch', 'pid-reuse-descendant', 'cim-unavailable', 'terminal-exit')]
     [string]$SyntheticResult = 'timeout'
 )
 
@@ -45,6 +45,7 @@ $ownershipIssues = New-Object 'System.Collections.Generic.HashSet[string]'
 $cimUnavailable = $false
 $cleanupStatus = 'not-started'
 $ownershipVerified = $false
+$rootOwnershipEstablished = $false
 $syntheticDescendantPid = $null
 $syntheticDescendantRegistered = $null
 $syntheticDescendantAliveAfterCleanup = $null
@@ -292,6 +293,7 @@ function Initialize-OwnedRoot {
         return
     }
     $ownedRecords[[int]$rootPid] = $current[0]
+    $script:rootOwnershipEstablished = $true
     Observe-OwnedTree -validatedSnapshot $snapshot
 }
 
@@ -321,12 +323,21 @@ function Stop-OwnedProcesses([bool]$includeRoot) {
         return
     }
     $ownership = Get-RootOwnership
-    if ($ownership.status -ne 'owned') { return }
-    Observe-OwnedTree -validatedSnapshot $ownership.snapshot
-    if ($cimUnavailable) { return }
-    $postObservationOwnership = Get-RootOwnership
-    if ($postObservationOwnership.status -ne 'owned') { return }
-    if ($includeRoot) { Stop-ExactProcessTree -targetPid ([int]$rootPid) }
+    $rootExitedAfterTerminal = $ownership.status -eq 'exited' -and $terminalObserved -and $rootOwnershipEstablished
+    if (-not $rootExitedAfterTerminal -and $ownership.status -ne 'owned') { return }
+    if (-not $rootExitedAfterTerminal) {
+        Observe-OwnedTree -validatedSnapshot $ownership.snapshot
+        if ($cimUnavailable) { return }
+        $postObservationOwnership = Get-RootOwnership
+        if ($postObservationOwnership.status -ne 'owned') { return }
+    } else {
+        # The terminal report is durable before app.exit(); the owned root may
+        # naturally disappear during the flush window. Known descendants are
+        # still checked by creation date below, but no root-missing issue is
+        # raised and no new tree is inferred from an absent root.
+        [void]$ownershipIssues.Remove('root-missing')
+    }
+    if ($includeRoot -and -not $rootExitedAfterTerminal) { Stop-ExactProcessTree -targetPid ([int]$rootPid) }
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
         $live = @(Get-LiveOwnedRecords | Where-Object { $null -eq $rootPid -or [int]$_.Id -ne [int]$rootPid })
         if ($live.Count -eq 0) { break }

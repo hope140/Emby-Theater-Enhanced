@@ -1,12 +1,16 @@
 # 项目状态
 
+## 2026-09-14 — Pepper readiness 抖动诊断
+
+当前 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c` 的产品代码保持冻结。基于新建且通过 full runtime provenance 的 `dist/EmbyTheaterEnhanced-0.1.1-readiness-diagnosis-e9e2ad2` 完成 3 次有界 real acceptance，均 `acceptance=success`、`runner=completed`、`timedOut=false`、`cleanup=verified-clean`、residual=0。三次均观察到唯一 embed，播放期间无重建；`play-called→embed` 为 4535–5996ms，`embed→authoritative enhancedDiagnostics(libmpv, 'ready')` 为 2–3ms。当前诊断为 `ROOT CAUSE NOT YET CONFIRMED`，主要抖动位于 embed 创建前的 PlaybackManager/player 前置链，精确 sub-stage 仍待观测；没有证据支持 Pepper/plugin 初始化、ready 丢失、embed recreation 或 PR4/DirectUrl/resolver 是本轮 ready 抖动原因。详见 `docs/PEPPER_READINESS_DIAGNOSIS.md`。本轮只增强 acceptance harness 与文档，未修改产品代码，不提交、不推送。
+
 更新时间 2026-09-14（UTC+8）。**当前产品代码保持冻结。readiness harness baseline 已由 `3d1cc6d906131d2e7e1d0a10af5fd354b228a41d` 提交；本轮独立 follow-up 加固了 runtime provenance、终态单写入和 PID ownership 边界。历史 real acceptance artifact 已分开记录：旧 `readiness-main-20260914-070236533-48d1e60e` 是 acceptance success 但 runner 在旧生命周期下以 242507ms timeout 收尾；较新的 `terminal-real-20260914-073146032-27837240` 是 acceptance success、runnerResult=`completed`、timedOut=`false`、elapsed=`15959ms`、residual=0。两次均保持 `loadfile` unavailable observability gap，不作为 gate。**
 
 ## 接手摘要
 
 - Baseline：用户提供的 Carnival 3.0（应用 3.0.20-3.0）+ 综合补丁最终 ZIP。
 - Enhanced：0.1.1 开发候选；Windows host 文件版本保持 3.0.20.0，Electron 应用构建版本为 0.1.1。
-- Git：本地 Git baseline 完成；`main` 与 `origin/main` 的产品基线为 `c880b97757be422ae818fe30b3a335003e41227b`，当前工作分支为 `fix/acceptance-readiness`。readiness harness baseline 与本轮 follow-up 均为独立提交，尚未推送或创建 PR；未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
+- Git：本地 Git baseline 完成；当前工作分支为 `main`，HEAD 与 `origin/main` 均为 `e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`。Readiness harness 已随 PR #5 合并；本轮诊断的 harness 与文档改动尚未提交、推送或创建 PR。未知来源的完整 Web snapshot、vendor 输入、二进制与构建产物均排除。
 - 源码：`src/electronapp`；原件在根目录，解包输入在 `vendor/carnival` 与 `vendor/patch`。
 - 交付：`dist/EmbyTheaterEnhanced-0.1.1-final-win-x64/Start-Enhanced.cmd`；`dist/EmbyTheaterEnhanced-0.1.1-win-x64-setup.exe`。旧 0.1.0 产物保留。
 - 工具：`tools/prepare.ps1`、`build.ps1`、`package.ps1`、`test-runtime.ps1`、`test-host.ps1`、`tests/readiness-acceptance.ps1`。

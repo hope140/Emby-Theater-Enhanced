@@ -1,5 +1,32 @@
 # 开发日志
 
+## 2026-09-14 — Pepper readiness 抖动诊断
+
+本轮按用户任务只做 Foundation / Pepper readiness diagnosis。基线为 `main@e9e2ad221ed5059574f830e9ffd9ef0dd5c8a22c`，产品 `src/electronapp`、PlaybackManager、libmpv、preload、main、resolver、CD2、DirectUrl、服务器和用户播放器配置均未修改；没有提交、推送或发布。
+
+静态审计确认实际链路为 PlaybackManager `self.play()` → `playInternal()` → `showVideoOsd()` → `displaySync()` → `createMediaElement()` → `<embed type="application/x-mpvjs">` → embed `message` `{type:'ready'}` → `enhancedDiagnostics(libmpv, 'ready')` → resolver/loadfile/core-playing → `enhancedDiagnostics(..., 'playing')` → manager play Promise resolve。产品在 `libmpv.js:523` 插入 embed 后才在 `:526` 注册 window `ready` listener，存在静态 listener-after-event 风险；当前没有 ready timeout/retry。现有 `createMediaElement()` call、outgoing loadfile 和 DLL init 起点没有可靠 acceptance signal。
+
+本轮只在 `tests/` 与 `tools/` 做最小 harness 增强：observer 用 MutationObserver 记录 embed creation observation、attached/disconnected、unique count、recreation/duplicate；recorder 输出 lifecycle/timing；profile inspect 兼容 Promise-style loader、global ConnectionManager 延迟初始化；runner 对 terminal report 后 root 自然退出按已验证 creation date 继续做安全 cleanup。没有加入产品 instrumentation、通用 AMD probe、event bus 或复杂状态机。
+
+按当前 HEAD 新建 `dist/EmbyTheaterEnhanced-0.1.1-readiness-diagnosis-e9e2ad2`，runtime provenance 820/820 scope entries 通过。Run A/B/C 均使用相同 runtime、相同 harness 和 `inspect,select,play,stop`：
+
+| Run | play→embed | embed→bootstrap | embed→authoritative ready | ready→manager resolved | result |
+|---|---:|---:|---:|---:|---|
+| A | 5996ms | 3ms | 2ms | 2657ms | success |
+| B | 4565ms | 4ms | 3ms | 2117ms | success |
+| C | 4535ms | 4ms | 3ms | 2268ms | success |
+
+三次均 unique embed=1、无播放期间 recreation/duplicate；runner 均 `completed`、`timedOut=false`、`cleanup=verified-clean`、residual=0。`bootstrap→authoritative ready` 原始值三次为 -1ms，解释为同一 message dispatch 中产品 listener 先于 acceptance listener，业务间隔约 0ms。resolver-result 在 ready 后 4–5ms 出现，loadfile observation 仍 unavailable，不影响 gate。
+
+诊断结论：`ROOT CAUSE NOT YET CONFIRMED`。本轮主要 jitter stage 是 `play-called→embed-created/attached`（4535–5996ms），不是 `embed→Pepper ready`。最可能层是 embed 创建前的 PlaybackManager/player 前置链，包括 API/码率/流选择、OSD 路由和 display-sync，但当前没有调用级时间戳，不能确认单一根因。三次没有证据支持 PPAPI/plugin ready 随机延迟、ready 丢失、embed recreation、harness 影响或 PR4/DirectUrl/resolver 因果关系。完整脱敏 evidence 见 `docs/PEPPER_READINESS_DIAGNOSIS.md`。
+
+Model Tier: 2
+Model: current Codex session
+Reason: real Pepper/libmpv readiness timing spans PlaybackManager, Electron/Preload, embed lifecycle, bridge message ordering and bounded acceptance cleanup; product lifecycle was kept frozen
+Escalated: no
+
+结论：三次 readiness 样本已完成；root cause 未确认，不提出产品修复，不提交、不推送。
+
 ## 2026-09-14 — terminal writer 与 cleanup verification follow-up
 
 本轮只处理 acceptance harness 的终态写入和 cleanup verification，产品代码、resolver、observer、PlaybackManager、libmpv、preload、CD2、Pepper bridge 与服务器配置均未修改。`inspectProfile()`、normal success/failure、operation failure 与 global timeout 现在都通过同一个 `createTerminalWriter()`，其内部复用 `OPEN → FINALIZING → COMPLETED` single-writer guard；losing path 在 await 返回后先检查 ownership，不再写入 shared `failure`、terminal classification 或 `report.completed`。cleanup 入口先用当前 root PID 与原始 CreationDate 完成 identity validation，再将同一已验证 snapshot 交给 tree observation；root missing、reuse 或 CIM unavailable 都不会登记或清理 descendants。
