@@ -19,6 +19,13 @@
 
 结论：**Batch 1 frontend/plugin layer REMOVED；READY FOR BATCH 2 PLANNING**。本轮没有修改播放、Session、main IPC 或 shared shell；产品行为回归通过。
 
+### Provenance portability follow-up
+
+Batch 1 review 发现 ignored Web snapshot 会造成 provenance 随开发机状态变化。修复方案是让 `tools/runtime-provenance.cjs` 对精确前缀 `src/electronapp/www/modules/externalplayer/` 做 intentional source exclusion，并将该 contract 写入 `validatedProductScope.excludedSourcePrefixes`；source subtree 存在或不存在时产品 scope 相同，其他 source file 仍保持 full provenance 校验。
+
+Local audit workspace：本机曾删除 41 个 ignored snapshot files。
+Durable repository/product behavior：`runtime-provenance.cjs` 与 `build.ps1` 共同保证该 frontend 无论本地 ignored snapshot 是否存在，都不会进入 fresh Enhanced runtime；vendor 原件仍只读保留。
+
 ## Audit Basis and Evidence Rules
 
 已核对的项目文档包括：

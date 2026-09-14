@@ -9,6 +9,9 @@ const OVERLAY_GENERATOR_PATH = 'tools/patch-playbackmanager.cjs';
 const PACKAGE_RUNTIME_PATH = 'electronapp/package.json';
 const PACKAGE_GENERATOR_PATH = 'tools/build.ps1';
 const START_WRAPPERS = ['tools/Start-Enhanced.ps1', 'tools/Start-Enhanced.cmd'];
+const EXCLUDED_SOURCE_PREFIXES = Object.freeze([
+    'src/electronapp/www/modules/externalplayer/'
+]);
 const OVERLAY_GENERATORS = new Map([
     [OVERLAY_RUNTIME_PATH, OVERLAY_GENERATOR_PATH],
     [PACKAGE_RUNTIME_PATH, PACKAGE_GENERATOR_PATH]
@@ -43,16 +46,27 @@ function walkFiles(root) {
 
 function slash(value) { return value.split(path.sep).join('/'); }
 
+function isExcludedSourcePath(sourcePath) {
+    return EXCLUDED_SOURCE_PREFIXES.some(prefix => sourcePath.startsWith(prefix));
+}
+
+function sameStringArray(actual, expected) {
+    return Array.isArray(actual) && actual.length === expected.length &&
+        actual.every((value, index) => value === expected[index]);
+}
+
 function sourceEntries(root) {
     const sourceRoot = path.join(root, 'src', 'electronapp');
     const entries = walkFiles(sourceRoot).map(file => {
         const relative = slash(path.relative(sourceRoot, file));
+        const sourcePath = 'src/electronapp/' + relative;
+        if (isExcludedSourcePath(sourcePath)) return null;
         return {
-            sourcePath: 'src/electronapp/' + relative,
+            sourcePath,
             runtimePath: 'electronapp/' + relative,
             relation: 'copied'
         };
-    });
+    }).filter(Boolean);
     for (const wrapper of START_WRAPPERS) {
         entries.push({sourcePath: wrapper, runtimePath: slash(path.basename(wrapper)), relation: 'copied'});
     }
@@ -102,7 +116,8 @@ function writeManifest(root, runtime, sourceCommit) {
             runtimeRoot: 'electronapp',
             includesIgnoredSourceFiles: true,
             includesStartWrappers: true,
-            description: 'All repo-owned src/electronapp files plus Start-Enhanced wrappers; package metadata and PlaybackManager are recorded as explicit build overlays',
+            excludedSourcePrefixes: [...EXCLUDED_SOURCE_PREFIXES],
+            description: 'All non-excluded repo-owned src/electronapp files plus Start-Enhanced wrappers; package metadata and PlaybackManager are recorded as explicit build overlays',
             fileCount: files.length,
             files
         },
@@ -121,7 +136,13 @@ function failedValidation(runtime, sourceCommit, errors, files, manifest) {
         manifest: 'runtime-provenance.json',
         baselineIdentity: manifest && manifest.baselineIdentity || null,
         validatedProductScope: manifest && manifest.validatedProductScope
-            ? {sourceRoot: manifest.validatedProductScope.sourceRoot, runtimeRoot: manifest.validatedProductScope.runtimeRoot, fileCount: manifest.validatedProductScope.fileCount}
+            ? {
+                sourceRoot: manifest.validatedProductScope.sourceRoot,
+                runtimeRoot: manifest.validatedProductScope.runtimeRoot,
+                excludedSourcePrefixes: Array.isArray(manifest.validatedProductScope.excludedSourcePrefixes)
+                    ? manifest.validatedProductScope.excludedSourcePrefixes : [],
+                fileCount: manifest.validatedProductScope.fileCount
+            }
             : null,
         files: files || [],
         errors
@@ -148,6 +169,9 @@ function validateManifest(root, runtime, sourceCommit) {
     const scope = manifest.validatedProductScope;
     if (!scope || scope.sourceRoot !== 'src/electronapp' || scope.runtimeRoot !== 'electronapp' || scope.includesIgnoredSourceFiles !== true || !Array.isArray(scope.files)) {
         return failedValidation(runtime, sourceCommit, errors.concat('validated-product-scope-missing'), [], manifest);
+    }
+    if (!sameStringArray(scope.excludedSourcePrefixes, EXCLUDED_SOURCE_PREFIXES)) {
+        errors.push('source-exclusion-contract-mismatch');
     }
     const expected = sourceEntries(root);
     const bySource = new Map(scope.files.map(entry => [entry.sourcePath, entry]));
@@ -218,6 +242,7 @@ function validateManifest(root, runtime, sourceCommit) {
             sourceRoot: scope.sourceRoot,
             runtimeRoot: scope.runtimeRoot,
             includesIgnoredSourceFiles: scope.includesIgnoredSourceFiles === true,
+            excludedSourcePrefixes: Array.isArray(scope.excludedSourcePrefixes) ? scope.excludedSourcePrefixes : [],
             fileCount: scope.fileCount,
             currentFileCount: expected.length
         },

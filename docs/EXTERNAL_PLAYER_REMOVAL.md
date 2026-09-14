@@ -24,6 +24,11 @@
 
 这 41 个 Web 文件位于 `.gitignore` 的本地 snapshot，不作为公开 Git 文件提交。Git 提交记录的是生成 runtime 的排除规则和 obsolete test 删除；`vendor/carnival` 仍保留原始 41 文件，作为只读来源基线。
 
+Local audit workspace：本机物理删除了 41 个 ignored snapshot files。
+Durable repository/product behavior：`runtime-provenance.cjs` 的精确 source exclusion 与 `tools/build.ps1` 的 runtime exclusion 共同保证 External Player frontend 不会进入 fresh Enhanced runtime，不依赖开发机是否手工删除 snapshot。
+
+本轮后续 portability 修复还会把该 exclusion 写入 provenance manifest，并用 source sentinel 验证存在/不存在两种机器状态的 scope 一致性。
+
 ## 仍然保留的共享能力
 
 - `src/electronapp/shell.js` 保留。`shell.openUrl` 仍被 IAP、metadata editor、registration services 和通用 `emby-button` 使用。

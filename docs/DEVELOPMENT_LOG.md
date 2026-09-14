@@ -1,8 +1,14 @@
 # 开发日志
 
+## 2026-09-14 — Provenance portability blocker fix
+
+Batch 1 review 发现 External Player frontend 位于 ignored `src/electronapp/www/`，本机删除 41 个文件不会同步到其它构建机；若 provenance 继续枚举它们，而 build runtime 已排除目录，另一台机器会构建失败。本轮只修该 contract：`runtime-provenance.cjs` 以精确 `src/electronapp/www/modules/externalplayer/` 前缀做 intentional source exclusion，并在 `validatedProductScope.excludedSourcePrefixes` 中记录；write/validate 共用同一 exclusion，其他非排除 source file 的缺失仍 fail。
+
+Local audit workspace：本机曾删除 41 个 ignored snapshot files。Durable repository/product behavior：provenance contract 与 `tools/build.ps1` exclusion 保证该 frontend 不进入 fresh Enhanced runtime，无论 ignored snapshot 是否存在。新增 targeted provenance regression，未修改播放代码、Session、main IPC、shell、CEC、vendor 或用户数据；未重新执行真实 acceptance。
+
 ## 2026-09-14 — External Player frontend cleanup Batch 1
 
-从 Audit commit `fb434e57f2cca065c784e0551c651ef57d1a2634` 创建 `cleanup/external-player-frontend`，提交 `adc8758902a580cc3bc7fc33bfb10a6b422c828d`，消息为 `cleanup: remove dead external player frontend`。本轮按 contract 只清理前端/plugin 表层：物理删除本地 ignored Web snapshot 中 `www/modules/externalplayer/**` 的 41 个文件；在 `tools/build.ps1` 增加纯 External Player runtime exclusion，避免 vendor 全量复制把它重新带入新 runtime；删除直接读取该 plugin 文件的 obsolete 单测。没有修改 main.js、mpvPosEvent、named pipe、shell、shell.openUrl、CEC、Pepper/PPAPI、libmpv、PlaybackManager、remoteplayer、Session、resolver、CD2、DirectUrl、Mount、preload、external/、vendor helper 或用户设置。
+从 Audit commit `fb434e57f2cca065c784e0551c651ef57d1a2634` 创建 `cleanup/external-player-frontend`，提交 `adc8758902a580cc3bc7fc33bfb10a6b422c828d`，消息为 `cleanup: remove dead external player frontend`。本轮按 contract 只清理前端/plugin 表层：物理删除本地 ignored Web snapshot 中 `www/modules/externalplayer/**` 的 41 个文件；在 `tools/build.ps1` 增加纯 External Player runtime exclusion，避免 vendor 全量复制把它重新带入新 runtime；删除直接读取该 plugin 文件的 obsolete 单测。持久化仓库行为是 exclusion，不是 41 个 tracked file deletion。没有修改 main.js、mpvPosEvent、named pipe、shell、shell.openUrl、CEC、Pepper/PPAPI、libmpv、PlaybackManager、remoteplayer、Session、resolver、CD2、DirectUrl、Mount、preload、external/、vendor helper 或用户设置。
 
 删除前重新追踪了 registration、AMD require、route/controller、自引用和 package copy rule。删除后剩余 `externalplayer` 命中逐项归类为 Android 平台分支、Batch 2 settings/autoplay/PlaybackManager guard、负向 smoke 断言或合法 build exclusion，没有失效的 `www/modules/externalplayer` runtime path。vendor/carnival 原件仍保留 41 个文件且未修改。
 
