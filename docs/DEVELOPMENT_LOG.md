@@ -1,5 +1,113 @@
 # 开发日志
 
+## 2026-09-14 — terminal writer 与 cleanup verification follow-up
+
+本轮只处理 acceptance harness 的终态写入和 cleanup verification，产品代码、resolver、observer、PlaybackManager、libmpv、preload、CD2、Pepper bridge 与服务器配置均未修改。`inspectProfile()`、normal success/failure、operation failure 与 global timeout 现在都通过同一个 `createTerminalWriter()`，其内部复用 `OPEN → FINALIZING → COMPLETED` single-writer guard；losing path 在 await 返回后先检查 ownership，不再写入 shared `failure`、terminal classification 或 `report.completed`。cleanup 入口先用当前 root PID 与原始 CreationDate 完成 identity validation，再将同一已验证 snapshot 交给 tree observation；root missing、reuse 或 CIM unavailable 都不会登记或清理 descendants。
+
+新增 integration synthetic 覆盖 `inspectProfile` failure 与 global timeout 的近同时竞争，以及 success claim 后 losing failure 的污染尝试；两项均只产生一次 terminal save，胜出的 classification 保持不变。CIM/WMI 查询失败现在 fail closed：不 kill 未确认 ownership 的 PID，`cleanupStatus=unverified`、`ownershipVerified=false`、`residualOwnedProcesses=null`，runnerResult=`cleanup-unverified` 且返回非零。新增 PID-reuse-with-descendant synthetic，确认复用 root 的 child 未被登记或终止。正常 success/failure/timeout 保持 `verified-clean`；CreationDate mismatch 保持 `pid-reused`/`ownership-mismatch` 并阻止完整 cleanup success。
+
+`dist/EmbyTheaterEnhanced-0.1.1-provenance3-20260914` 在本 follow-up commit 前绑定 `8a3433e53a9c47bba0c25ff5b43e1b3281a4fe9e`，full provenance positive validation 820/820 通过；较早 `provenance2` runtime 因 sourceCommit stale 被 ValidationOnly negative 正确报告为 `runtime-validation-failed`，未启动 Electron。未运行真实 Emby acceptance。
+
+Model Tier: 2
+Model: current Codex session
+Reason: terminal ownership race and cleanup-verification semantics cross the Electron writer and PowerShell runner, while product playback remains frozen
+Escalated: no
+
+结论：terminal writer、inspectProfile integration race、losing-writer protection、CIM unavailable fail-closed、root-before-tree ordering 和既有 PID mismatch 均有合成证据，已形成独立 follow-up commit，可进入 targeted review。
+
+## 2026-09-14 — readiness harness boundary hardening
+
+本轮是 readiness harness 的独立 follow-up 审计，产品代码、PlaybackManager、libmpv、preload、CD2、Pepper bridge、resolver 和服务器配置均保持不变。runtime provenance 从少量 sentinel 扩展为构建范围清单：覆盖 `src/electronapp` 的全部 818 个文件和两个 `Start-Enhanced` wrapper，共 820 个 scope entries；`package.json` 元数据与 PlaybackManager 改写分别记录为显式 build overlay。`sourceCommit`、`validatedProductScope` 与 `baselineIdentity` 分开保存，vendor baseline、node_modules production closure、Electron runtime binary 和 native mpv 不归入产品 scope。
+
+`dist/EmbyTheaterEnhanced-0.1.1-provenance2-20260914` 在上一 follow-up commit 前绑定 baseline `3d1cc6d906131d2e7e1d0a10af5fd354b228a41d`，full provenance positive validation 与 package payload verification 通过；旧 partial-stale runtime 的 ValidationOnly negative 以 `runtime-validation-failed` fail-fast，未启动 Electron。runner 的 terminal guard 采用 `OPEN → FINALIZING → COMPLETED` 单写入语义，success/failure/timeout、terminal race 与 PID mismatch synthetic 均通过；后续本轮补充了 `inspectProfile` integration race、losing-writer protection 与 CIM fail-closed。PID cleanup 在 kill 前重新读取 root PID 的 CreationDate，synthetic mismatch 记录 `pid-reused`/`ownership-mismatch`，不执行不属于本次 run 的清理。CIM lookup unavailable synthetic 以 `cleanupStatus=unverified`、`ownershipVerified=false`、residual 未知结束，runner 不报告完整 success，也不 kill 不确定 PID。
+
+历史 real artifact 分开保留：`readiness-main-20260914-070236533-48d1e60e` 是旧 runner lifecycle 下 acceptance success 但 `runnerResult=timeout`、总耗时 `242507ms`；`terminal-real-20260914-073146032-27837240` 是终态收尾修复后的 acceptance success、`runnerResult=completed`、`timedOut=false`、总耗时 `15959ms`、residual=0。两次均将 `loadfileObservation=unavailable` 作为 observability gap，不作为 gate。本轮 follow-up 没有运行真实 acceptance。
+
+文档同步更正了 fixture 覆盖范围：可重复 fixture 覆盖 profile inspect 的 client lookup；global API、single PlaybackManager require 与 global fallback 不再被描述为已有独立 fixture 证明，而以 acceptance flow/real artifact 证据区分记录。旧 `guard()` helper 已移除。
+
+Model Tier: 1
+Model: current Codex session
+Reason: bounded provenance, terminal lifecycle and process ownership review; product playback lifecycle remained frozen
+Escalated: no
+
+结论：readiness harness follow-up 的 provenance、terminal race 与 PID ownership 边界已完成静态/合成验证，已形成独立提交并可进入 review；不推送、不创建 PR、不运行真实 acceptance。
+
+## 2026-09-14 — runner terminal lifecycle follow-up
+
+本轮只修改 acceptance runner 的终态收尾与 synthetic child，产品代码、resolver、observer 事实采集和 loadfile 观测均未修改。`tests/readiness-acceptance.ps1` 现在以 `acceptance.json` 的 `completed=true` 且存在安全 terminal classification 作为唯一终态来源；检测后等待 300ms flush window，再只清理本次启动的 exact root process tree。240000ms deadline 仍保留给无 terminal report 的 hang，并以 `timedOut=true` / `runnerResult=timeout` 区分。
+
+synthetic success 在约 2.5s 内返回 `runnerResult=completed`、`timedOut=false`、residual=0；synthetic terminal failure 同样提前结束并保留 runner exit code 1；无 terminal report 的 timeout case 返回 `runnerResult=timeout`、`timedOut=true`、residual=0。未使用全局进程名清理。
+
+较新的 `terminal-real-20260914-073146032-27837240` acceptance artifact 使用已校验 runtime，terminal success 在约 14.2s 被识别，runner 总耗时 15.959s，`runnerResult=completed`、`timedOut=false`、acceptance report 存在、root PID 52620 的 exact cleanup 后 residual owned processes=0。`processExitCode=1` 是 taskkill 后的 child 状态，runner 根据 terminal classification 正确返回 `runnerExitCode=0`。本 follow-up 不运行真实 acceptance。
+
+Model Tier: 1
+Model: current Codex session
+Reason: bounded runner terminal detection and owned process cleanup only
+Escalated: no
+
+结论：runner success/failure/timeout 三种生命周期均已验证；本轮不提交、不推送、不发布。
+
+## 2026-09-14 — resolver-bearing runtime acceptance
+
+基于当前 HEAD `c880b97757be422ae818fe30b3a335003e41227b` 使用既有 `tools/build.ps1` 新建 `dist/EmbyTheaterEnhanced-0.1.1-readiness-main-20260914`（2156 files），未覆盖已有 runtime、vendor 或产品源码。正式 runner 增加 runtime fail-fast：四个关键产品文件逐项 source/runtime SHA256 MATCH，`electronapp/resolvers/` 存在，`libmpv.js` 含 `strmResolver.resolveAsync` 与 resolver-result marker；旧 `final-win-x64` 负例被报告为 `runtime-validation-failed` 且未启动 Electron。acceptance report 记录 runtime name、source commit 和 validation status。
+
+更正 gate 语义：`resolver-enter` 改为 `resolver-result`，因为现有产品日志在 `await strmResolver.resolveAsync(...)` 返回后才输出；observer 轮询中恢复被 app 覆盖的 console hook。loadfile 保持 observability gap：embed outgoing `postMessage` wrapper 仍失败并记录 `embed-command-hook-failed`，因此 loadfile 只报告 `unavailable`，不作为硬 gate。产品代码与 PlaybackManager/libmpv 实现未修改。
+
+旧 runner lifecycle iteration 使用 `readiness-main-20260914-070236533-48d1e60e`。runtime validation=passed；`inspect=PASS`、`select=PASS`、`isStrm=true`、容器为 `mkv`/`mp4`、`play-called`、`embed-created`、Pepper authoritative-ready、`manager-play-resolved`、`resolver-result` 全部通过。`loadfileObservation=unavailable`，未作为失败条件；acceptance 主链结果为 `success`，没有新增完整控制链之外的额外结论。runner 达到 240000ms child deadline 后总耗时 242507ms，报告、stdout/stderr 存在，ownership inspection=ok，exact root process tree cleanup 后 residual owned processes=0。
+
+Model Tier: 1
+Model: current Codex session
+Reason: runtime provenance gate and bounded resolver-result terminology correction; no product flow instrumentation
+Escalated: no
+
+结论：harness 已使用 current-main runtime 贯通至 resolver-result；loadfile 仍是明确的 observability gap，不据此判断产品失败。无需升级到产品 flow 调查，不提交、不推送、不发布。
+
+## 2026-09-14 — resolver/loadfile missing static audit
+
+本轮只读审查当前 acceptance harness 与实际 runtime provenance，没有新增 harness 代码、没有修改产品代码，也没有执行第二次真实 acceptance。当前 runner/observer 职责仍清晰：`tests/readiness-acceptance.ps1` 负责 owned root/deadline/cleanup，`tests/acceptance-readiness.js` 只记录产品事实，`tests/live-acceptance-browser.js` 负责 flow gates，`tools/acceptance-readiness.cjs` 负责结果汇总。未发现第二套 event bus 或重复 gate state machine；`tools/acceptance-electron.cjs` 的 `guard` helper 当前未使用，作为后续纯 cleanup 候选保留。
+
+关键 provenance：`tests/readiness-acceptance.ps1` 默认启动 `dist/EmbyTheaterEnhanced-0.1.1-final-win-x64`，该目录时间早于当前 resolver runtime；其 `electronapp/plugins/libmpv.js` 不包含 `strmResolver.resolveAsync`、`STRM resolver: invoked` 或 file-local load option。当前 `src` 与 `dist/EmbyTheaterEnhanced-0.1.1-readiness-b-main-20260914` 的 `libmpv.js` hash 一致，并包含 resolver 调用与 marker。因此上一次真实 run 的 `resolver-enter=missing` 首要分类为 A：实际 acceptance runtime 没有进入 resolver 产品代码，不能据此判断 resolver regression。
+
+当前源码实际链路为 `libmpv.js:647` 的 `await strmResolver.resolveAsync(...)`，resolver 完成后在 `libmpv.js:677` 调用 `logStrmResolverResult`。`tests/acceptance-readiness.js:85` 匹配该完成日志却标记 `resolver-enter`，所以该名称不准确，属于 D；它最多表示 resolver decision/result 已打印，不能证明 entry。`libmpv.js:788-790` 才是当前源码的 `loadfile` command，`sendCommand` 位于 `:1399-1405`。observer 在 `acceptance-readiness.js:33` 依赖收到 command，并在 `:51-58` 尝试覆盖 embed 的 `postMessage`；本次真实报告的 `lastError=embed-command-hook-failed` 证明该 outgoing loadfile 观测不具权威性，形成 OBSERVABILITY GAP。
+
+本次 timeline 显示 observer installed 约 283ms、`play-called` 约 2770ms，因此 C（observer 晚于 resolver）不成立；但 app 的 `data-appmode=standalone` 会在 `www/app.js:1650` 改写 `console.log`，现有 hook 仍有生命周期 race。当前真实样本由 `select` 的 `.strm` 后缀过滤，`strm=true`，容器为 `mkv`/`mp4`，resolver 入口条件成立。PlaybackManager 的 `self.play()` 返回 `playWithIntros` 链；视频 local player 的 `player.play()` 继续等待 libmpv `playForRequest`，后者等待 `playInternal`、core-playing、OSD 与 playing diagnostic，因此 manager-play-resolved 对当前源码可确认是播放 promise 完成，但在 stale runtime 中只证明旧 native play 已完成，不能反推 resolver 曾执行。
+
+本轮不修改产品 instrumentation，不尝试修复 loadfile 的不可靠 outgoing hook，不执行第二次真实 run。下一步最小 harness 修复应先固定/校验 resolver-bearing runtime，再把 resolver gate 改成准确的 result/decision 语义；loadfile 若没有现有可靠 acceptance-only source，继续保持 OBSERVABILITY GAP。
+
+## 2026-09-14 — inspect module acquisition follow-up
+
+保持 `fix/acceptance-readiness`，产品代码继续冻结在 `main@c880b97`；本轮只修改 acceptance flow/report 分类，没有修改 `src/electronapp`、PlaybackManager、libmpv、preload、CD2、Pepper bridge、服务器或配置。对比 PR #2/#4 的历史 flow 后确认，当前 frozen Alameda runtime 已暴露 `window.ConnectionManager`、`window.ApiClient`、`window.Events`；`playbackManager` 没有对应可靠 global。之前的三模块 batch require 与过早注入共同使 inspect 卡在 module resolution。
+
+`tests/live-acceptance-browser.js` 现按最小路径获取对象：有界等待并调用 `window.ConnectionManager.currentApiClient()`（必要时使用 `window.ApiClient`），只对已确认的 `playbackManager` 做一次 `require(['playbackManager'])`，事件对象直接使用 `window.Events`。没有新增通用 AMD resolver、自动扫描、relative-path probe 或 batch require；`tools/acceptance-electron.cjs` 只将 inspect acquisition 摘要提升到报告顶层，`tools/acceptance-readiness.cjs` 增加 API/PlaybackManager/Events 前置分类。observer 保持未改。
+
+实际 acquisition 路径已在 real acceptance artifact 中观察到 `window.ConnectionManager.currentApiClient`、canonical `playbackManager` require 与 `window.Events`；现有可重复 fixture 只覆盖 profile inspect 的 client lookup，没有独立 fixture 证明上述三条 live acquisition 路径。JS/PowerShell syntax、observer self-test、runner synthetic（exact root cleanup/residual 0）、`npm test` 56/56 和 `git diff --check` 通过。
+
+旧 `module-acq-20260914-061651157-ec84996` iteration 中，`inspect=PASS`、`select=PASS`、`play-called=seen`；acquisition 为 `currentApiClient=window.ConnectionManager.currentApiClient/available`、`PlaybackManager=amd-require:playbackManager/available`、`Events=window.Events/available`。随后 `embed-created`、Pepper authoritative-ready 与 `manager-play-resolved` 均被观察到，但 `resolver-enter` 未观察到，flow 以 `resolver-entry-timeout` 停止，`loadfile` 未观察到；没有新增完整 resolver/Session/remote-control/DirectUrl 全链通过结论。runner 最终达到 240000ms bounded deadline，报告存在，ownership inspection=ok，residual owned processes=0，并按 exact root process tree 清理。
+
+Model Tier: 1
+Model: current Codex session
+Reason: acceptance-only single-module acquisition and report classification; product playback lifecycle remained frozen
+Escalated: no
+
+历史结论：该 iteration 的 inspect module acquisition 目标完成并可进入 harness review；完整实服播放验收当时仍停在后续 `resolver-entry-timeout`。
+
+## 2026-09-14 — acceptance readiness runner 与 observer 收敛
+
+保持 `fix/acceptance-readiness`，产品代码冻结在 `main@c880b97`，没有修改 `src/`、PlaybackManager、Session/WebSocket、libmpv、服务器或 CD2 配置。本轮先复用 `.work/run-accept-once.ps1` 已证明的 `ProcessStartInfo` 形状，将 `tests/readiness-acceptance.ps1` 收敛为单次 runner：保存 exact root PID，使用 wall-clock deadline，超时只对该 root 的 owned process tree 执行精确 `taskkill /PID ... /T /F`，始终写入 `runner-result.json`、stdout 和 stderr，并记录 residual owned PID 数；没有按进程名全局清理。
+
+`tests/acceptance-readiness.js` 从 383 LOC 降至 124 LOC。observer 只记录安装时间、`enhancedDiagnostics` wrapper、`ready`/`playing`、mpv embed、bridge message summary、resolver console marker 和可观察到的 loadfile；Pepper authoritative ready 只认 `enhancedDiagnostics(..., 'ready')`，native bootstrap ready 单独记录。AMD module probe 与自建 event bus 已移出/删除，模块解析和六个播放 gate 回到 `tests/live-acceptance-browser.js`；删除了不再需要的 `tests/acceptance-modules.js` 与 `tools/readiness-timeline.cjs`。新增 `tests/acceptance-readiness-selftest.cjs`，不引入测试框架。
+
+静态与合成验证：`npm test` 56/56；修改/新增 JS 与 `tests/readiness-acceptance.ps1` PowerShell syntax PASS；`git diff --check` PASS；observer synthetic self-test PASS；runner synthetic child 写入 stdout/stderr 后在 1.2 秒 deadline 被精确终止，`runner-result=timeout`、runner exit code 124、stdout/stderr 文件存在、ownership inspection=ok、residual owned processes=0。synthetic 的 child process exit code 1 是 taskkill 终止结果，不作为 runner failure 误报。
+
+旧 `single-real` iteration 的 runner 在 47.2 秒内完成，`acceptance.json`、stdout/stderr 均存在，ownership inspection=ok、residual=0；Electron 子进程因 acceptance 失败返回 1，runner 如实返回 1。flow 在 `inspect` 阶段以 `module-resolution-timeout` 结束，没有 `play-called`、embed、Pepper-ready、manager-play-resolved、resolver-enter 或 loadfile 事实，因此没有真实播放/Session/远控通过证据。该次真实运行后仅补充了 flow 的 bare/window AMD loader 兼容尝试，当前代码的该补充只经过静态语法验证。
+
+Model Tier: 2
+Model: current Codex session
+Reason: Electron process ownership/timeout cleanup and acceptance gate responsibility cross the runner, renderer observer and browser flow; product playback code remains frozen
+Escalated: no
+
+结论：runner lifecycle 与 observer synthetic gate 通过，但真实 acceptance 在 harness inspect 前置阶段阻塞；当前为 `NEEDS MORE HARNESS WORK`，不提交、不推送、不发布。
+
 ## 2026-09-14 — PR #4 DirectUrl 收尾验证
 
 按已冻结的 PR #4 contract 完成机械回归与分层收尾，没有重做 Sol High review、没有重构 DirectUrl，也没有修改 PlaybackManager ownership、Session/WebSocket、libmpv 生命周期或服务器/CD2 配置。先发现既有 `cd2-direct-url-c` runtime 的 `cd2-service.js` 未包含 same-origin reserve 与显式空 UA fail-closed 修复，未覆盖原目录，改由 `tools/build.ps1` 生成独立 verification runtime（2156 files）；四个关键生产文件与 `src/` 逐 SHA256 一致。

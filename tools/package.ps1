@@ -3,6 +3,13 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if ($RuntimeName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid runtime name.' }
 $runtime = Join-Path (Join-Path $root 'dist') $RuntimeName
+$sourceCommit = ([string]((& git -C $root rev-parse HEAD 2>$null) | Select-Object -First 1)).Trim()
+if ($sourceCommit -notmatch '^[0-9a-fA-F]{40}$') { throw 'Unable to resolve source git commit.' }
+$provenanceText = (& node (Join-Path $root 'tools/runtime-provenance.cjs') validate $root $runtime $sourceCommit 2>$null | Out-String)
+$provenanceExit = $LASTEXITCODE
+$provenance = $null
+try { $provenance = $provenanceText | ConvertFrom-Json } catch { }
+if ($provenanceExit -ne 0 -or $null -eq $provenance -or $provenance.status -ne 'passed') { throw 'Runtime provenance validation failed before packaging.' }
 $build = Get-Content -LiteralPath (Join-Path $runtime 'build-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $expectedPaths = @($build.files | ForEach-Object { $_.path }) + @('build-manifest.json')
 $actualFiles = @(Get-ChildItem -LiteralPath $runtime -Recurse -File)
