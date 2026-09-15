@@ -1,5 +1,15 @@
 # 项目状态
 
+## 2026-09-15 — STRM resolver settings candidate
+
+基于 `main@ca9ca9de58c37b8f5f3782dd1e45e9efc2071495` 创建独立 worktree/branch `feat/strm-resolver-settings`。本轮将 STRM / Mount / CloudDrive2 / DirectUrl resolver 配置产品化：新增 schema version 1 的 main-process persistent config store、独立 secret 文件、trusted config IPC、最长前缀规则、cloud-first/mount-first/custom strategy、AUTO/USER/DISABLED 生命周期和 `mpvplayer/strm.html` 设置入口。PlaybackManager、Session、PlaySessionId、WebSocket、播放报告和 embedded libmpv ownership 未修改。
+
+配置保存后立即持久化，当前 CD2 service 不做 hot reload，页面提示重启后播放链生效。legacy `ETE_CD2_*` 只在首次 bootstrap 时迁移为 AUTO；persistent USER/AUTO/DISABLED 状态优先，renderer GET 只得到 `tokenConfigured`，不得到 token、Bearer metadata、raw gRPC client 或完整 DirectUrl。
+
+静态与自动化验证：新增 settings suite 17/17；全量 `npm test` 94/94；Windows/UNC/POSIX boundary、`..` 拒绝、最长前缀、规则 ownership、strategy order、mount replacement、DirectUrl/same-origin mode、Native fallback、Abort 和 bounded authenticated connection probe 均覆盖。新 runtime 已通过 source build、provenance 和 package payload verify；可见 synthetic pipeline 的 DirectUrl fake、CD2 HTTP fake、CD2 miss fallback、PlaybackManager/Session/controls/reporting/cleanup 证据保留。
+
+真实边界：当前 native-window automation surface 不可用，未继续启动播放器补齐手工点击证据，因此 `REAL SETTINGS UI: NOT COVERED — native window automation unavailable`。本分支未连接真实服务器，real cloud-first playback 与 real mount-first playback 均为 NOT COVERED；synthetic runtime/Node unit 不能替代真实验收。
+
 ## 2026-09-15 — Clean-room reproducibility / readiness observability hardening
 
 基于正式基线 `main@56b2227324811b525cd73caed61e3399cd2875e5` 创建独立分支 `audit/cleanroom-readiness-hardening`，代码提交为 `6c5cc9e05b7dbec6a01a2cf81cd19209deb0b319`。本轮只修改 prepare/build/provenance、acceptance observer/runner、diagnostics tooling、tests 和 docs；没有修改 PlaybackManager、resolver、libmpv 播放逻辑、Session/remote control、settings/autoplay、UI、CEC、Electron 或 mpv 版本。

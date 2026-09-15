@@ -1,6 +1,6 @@
 # STRM Playback Source Resolver
 
-Resolver 运行在现有 `PlaybackManager → libmpv` 播放链内，只决定 Embedded libmpv 最终加载的 source，不创建播放器、Session 或 PlaySession。当前优先级为 safe CloudDrive2 DirectUrl → CloudDrive2 same-origin HTTP → Mount → Native。
+Resolver 运行在现有 `PlaybackManager → libmpv` 播放链内，只决定 Embedded libmpv 最终加载的 source，不创建播放器、Session 或 PlaySession。规则命中后按 `cloud-first`、`mount-first` 或 `custom` order 尝试 safe CloudDrive2 DirectUrl、CloudDrive2 same-origin HTTP、Mount 和 Native。
 
 ## Detection
 
@@ -43,10 +43,10 @@ Resolver 使用三个严格分离的路径字段。
 ## CloudDrive2 rules
 
 1. 复用 Mount Resolver 的确定性媒体候选，不扫描目录、不解析 provider opaque id。
-2. main process 读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX`；token 不进入 renderer、诊断或日志。
-3. V1 仅支持一条 local prefix → POSIX cloud prefix mapping；drive/UNC 大小写不敏感，absolute POSIX 大小写敏感，均严格检查路径边界并拒绝 `..`。absolute POSIX `MediaSource.Path` 带 allowlisted 媒体后缀时是确定性 CD2 candidate；在 Windows client 上它不会进入 `existsSync` Mount 检查，只能由 CD2 命中，否则继续 native fallback。
+2. main process 以 persistent schema version 1 配置为 authoritative source；首次启动且没有持久化配置时才读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX` 做 AUTO bootstrap。token 不进入 renderer、诊断或日志。
+3. 每条命中规则独立执行 source prefix → POSIX cloud prefix mapping，并保留 source/mount/cloud 三种路径语义；drive/UNC 大小写不敏感，absolute POSIX 大小写敏感，均严格检查路径边界并拒绝 `..`。absolute POSIX `MediaSource.Path` 带 allowlisted 媒体后缀时是确定性 CD2 candidate；在 Windows client 上它不会进入 `existsSync` Mount 检查，只能由 CD2 命中，否则继续下一 stage。
 4. 先调用 `GetDownloadUrlPath(... get_direct_url=true)`；只有安全 HTTP(S) DirectUrl、空 additionalHeaders、受限可打印 ASCII User-Agent 与有效 expiry 才可直连。任意 additionalHeaders、控制字符、逗号/反斜杠 UA、无效/近过期 URL 均优先 same-origin。
-5. DirectUrl miss/unsupported/transport failure 后复用同次响应或调用 `get_direct_url=false` 取得同源 URL，再走 Mount → Native；全部阶段共享 750ms absolute budget。Abort/superseded 不进入 fallback。
+5. `direct-url` 与 `cd2-http` 通过同一 main service 的窄 mode 区分；DirectUrl miss/unsupported/transport failure 后按当前规则的下一 stage 取得同源 URL。连续 CD2 stages 复用 Find 结果并共享 750ms absolute budget。Abort/superseded 不进入 fallback。
 
 ## Mount rules
 
@@ -61,7 +61,9 @@ Resolver 使用三个严格分离的路径字段。
 
 URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、URL 解析或文件系统检查异常均转为 native fallback。
 
-第一版不进行模糊搜索、递归扫描、全盘搜索、父目录猜测、历史缓存、数据库或配置映射。
+Mount 规则命中时，会将 candidate 按 `sourcePrefix → mountPrefix` 做确定性前缀替换，再执行 `existsSync`。没有 `mountPrefix` 的规则不会猜测本地路径。
+
+第一版不进行模糊搜索、递归扫描、全盘搜索、父目录猜测、历史缓存、数据库或 provider 特判。
 
 ## Fallback and playback safety
 
@@ -76,4 +78,4 @@ URL pathname 使用 `URL` 解析，编码文件名使用安全解码。解码、
 
 ## Known limitations
 
-当前 unit/fake/frozen Electron 已覆盖 DirectUrl + file-local UA、unsafe UA/header → same-origin、known-expiry bounded reacquire、transport reject/timeout → same-origin、CD2 miss → Mount/Native、POSIX candidate 不进入 Windows Mount、Transcode、Abort、cancel、late callback、双 NextTrack、libmpv Stop、PlaybackManager Stop-before-player.play 和旧 `core-playing` listener。真实 DirectUrl 分层 smoke 已证明 returned UA 与 expiry 存在，embedded libmpv 使用 file-local UA 后 path/format/core-playing/time advancing。本轮完整 PlaybackManager 实服复测在 resolver 前超时；HTTP-error-triggered refresh、任意 additionalHeaders、多 mapping 与设置 UI 留待后续。
+当前 unit/fake/frozen Electron 已覆盖 DirectUrl + file-local UA、unsafe UA/header → same-origin、known-expiry bounded reacquire、transport reject/timeout → same-origin、规则策略顺序、source/mount/cloud prefix replacement、最长前缀、AUTO/USER/DISABLED、CD2 miss → Mount/Native、POSIX candidate 不进入 Windows Mount、Transcode、Abort、cancel、late callback、双 NextTrack、libmpv Stop、PlaybackManager Stop-before-player.play 和旧 `core-playing` listener。真实 settings UI 的 native-window 自动化和真实服务器 cloud-first/mount-first playback 未在本分支宣称；HTTP-error-triggered refresh、任意 additionalHeaders 和 active full-directory discovery 仍不支持。

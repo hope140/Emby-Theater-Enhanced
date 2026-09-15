@@ -8,7 +8,9 @@ Emby Theater Enhanced 是非官方的社区维护项目，与 Emby 不存在隶�
 
 第一轮已建立源码、输入清单、构建脚本、Inno 安装包、播放/远控审计与容错诊断。本地测试、实际安装生命周期、真实 STRM 播放及服务器后台控制均已通过；WatchTogether 按用户确认的后台控制口径验收。普通文件库内无样本，完整结果见 [LIVE_ACCEPTANCE](docs/LIVE_ACCEPTANCE.md) 和 [PROJECT_STATUS](docs/PROJECT_STATUS.md)。
 
-当前 `feat/cd2-direct-url` 候选在原 PlaybackManager/Session 链内按 DirectUrl → CloudDrive2 same-origin HTTP → Mount → Native 选择最终 source，Transcode 保持 Native。DirectUrl 只接受受限的 file-local User-Agent；任意 `additionalHeaders` 均自动回退 same-origin。自动测试、frozen transport/file-local UA/Stop 以及 fake DirectUrl 完整链既有证据已通过；真实 CD2 DirectUrl/embedded libmpv 分层 smoke 已通过。本轮完整 PlaybackManager 实服验收在进入 resolver 前超时，尚不能视为已发布能力。安全边界见 [CD2 DirectUrl contract](docs/CD2_DIRECT_URL.md)。
+当前维护版 resolver 在原 PlaybackManager/Session 链内按每条 STRM 路径规则选择 DirectUrl、CloudDrive2 same-origin HTTP、Mount 和 Native 的顺序，Transcode 保持 Native。DirectUrl 只接受受限的 file-local User-Agent；任意 `additionalHeaders` 均安全回退 same-origin。自动测试、frozen transport/file-local UA/Stop 以及 fake DirectUrl 完整链既有证据已通过；真实服务器播放证据继续按验收矩阵单独记录。安全边界见 [CD2 DirectUrl contract](docs/CD2_DIRECT_URL.md) 和 [STRM resolver settings](docs/STRM_RESOLVER_SETTINGS.md)。
+
+STRM 智能解析现在提供正式 Playback 设置页、main-process 持久化配置、多路径最长前缀匹配、cloud-first/mount-first/custom 策略，以及 AUTO/USER/DISABLED 规则生命周期。配置文件位于 `%APPDATA%\EmbyTheaterEnhanced\config\\`；CloudDrive2 token 只保存在 main-process secret 文件，renderer 只得到 `tokenConfigured` 状态。保存后重启应用使播放 service 重新加载配置。
 
 ## 使用本地构建
 
@@ -40,6 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -RuntimeNa
 
 - [当前状态与接手入口](docs/PROJECT_STATUS.md)
 - [CloudDrive2 DirectUrl 安全契约](docs/CD2_DIRECT_URL.md)
+- [STRM 智能解析设置契约](docs/STRM_RESOLVER_SETTINGS.md)
 - [架构与未来 Resolver 边界](docs/ARCHITECTURE.md)
 - [播放链路](docs/PLAYBACK_PIPELINE.md) / [Session 与远控](docs/SESSION_CONTROL.md)
 - [测试](docs/TESTING.md) / [构建与安装](docs/PACKAGING.md)

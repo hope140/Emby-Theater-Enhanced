@@ -1,5 +1,15 @@
 # 开发日志
 
+## 2026-09-15 — STRM resolver settings candidate
+
+Model Tier：2。Reason：跨 main-process persistent config/secret IPC、resolver rule ordering、Mount prefix replacement、DirectUrl/same-origin deadline reuse 和现有 libmpv source-only boundary；没有改变 PlaybackManager、Session、WebSocket 或 player ownership。Escalated：no。
+
+基于 `main@ca9ca9de58c37b8f5f3782dd1e45e9efc2071495` 创建 `feat/strm-resolver-settings` 独立 worktree。新增 `strm-config-store.js`、`strm-config-ipc.js`、`path-rules.js`、settings route/page/style/client 和 targeted tests。配置与 secret 分离，GET 只返回 tokenConfigured；legacy env 仅做首次 AUTO bootstrap。规则支持 source/mount/cloud 三种独立路径、最长前缀、Windows/UNC case-insensitive、POSIX case-sensitive、cloud-first、mount-first、custom order 以及 AUTO/USER/DISABLED 保护。
+
+CD2 service 保留现有 DirectUrl 安全 contract，并以 `direct` / `same-origin` mode 在同一 service 中复用 Find 结果和 750ms absolute deadline。Mount stage 增加 deterministic sourcePrefix → mountPrefix replacement；Native、Transcode、Abort、superseded 和 late-response 语义保持原行为。
+
+验证：`npm test` 94/94；settings targeted 17/17；JavaScript syntax、PowerShell syntax、`git diff --check`、prepare、build、runtime provenance 和 package verify 均按本分支执行。synthetic frozen runtime 的 DirectUrl、CD2 HTTP、CD2 miss fallback、PlaybackManager/Session/controls/reporting/cleanup 通过。native-window automation 不可用，真实 settings UI、真实服务器 cloud-first/mount-first playback 未宣称。
+
 ## 2026-09-15 — Clean-room / readiness foundation hardening
 
 Model Tier：2。Reason：跨 prepare/build/provenance 与 embedded Pepper readiness observer、真实 Session/playback evidence 的边界审计；产品播放代码保持冻结。
