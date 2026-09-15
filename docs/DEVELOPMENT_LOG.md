@@ -1,5 +1,13 @@
 # 开发日志
 
+## 2026-09-15 — Stable Enhanced DeviceId
+
+Model Tier：2。Reason：真实服务器 A/B 已证明 OLD 的 hostname DeviceId 对应服务器状态不可远控，而仅换用独立 DeviceId 后同一 OLD runtime 可远控；本轮只实现持久化 DeviceId，不改 capability、ApiClient、WebSocket 或播放链。Escalated：no。
+
+分支 `fix/stable-enhanced-device-id` 从 `origin/main@780aaed8ddc5bde42654e56e7635379f29f9e485` 创建，没有带入 `fix/product-session-identity`。main process 使用既有 ETE bootstrap config 目录中的 `device-identity.json` 作为持久化边界，首次运行生成 UUID v4，后续启动读取同一值；损坏/缺失时使用同目录临时文件、fsync 和 rename 重建。`deviceName` 仍为 hostname，旧 hostname DeviceId 不迁移。
+
+新增 `src/electronapp/device-identity.js` 与 `tests/device-identity.test.cjs`，覆盖首次生成、同 profile 稳定、clean profile 隔离、hostname 分离、损坏重建、randomBytes fallback、启动顺序、HTTP/WS identity 链和无 token/user/server 依赖。验证：targeted 9/9，`npm test` 110/110，相关 JavaScript syntax 与 `git diff --check` 通过。没有进行真实服务器授权验收；candidate 将在提交后的 HEAD 上构建，真实安装/远控由用户后续验收。
+
 ## 2026-09-15 — Direct app launch 真实安装验收收尾
 
 Model Tier：1。Reason：本轮仅记录用户完成的 Windows 真实安装后四入口手工验收并创建 PR，不修改产品代码，不重新 build/package/test/smoke。Escalated：no。

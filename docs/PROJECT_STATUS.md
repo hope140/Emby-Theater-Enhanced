@@ -1,5 +1,11 @@
 # 项目状态
 
+## 2026-09-15 — Stable Enhanced DeviceId implementation
+
+分支 `fix/stable-enhanced-device-id` 基于 `origin/main@780aaed8ddc5bde42654e56e7635379f29f9e485`，未基于 `fix/product-session-identity`。本轮只将正式 ETE 的 DeviceId 从 `os.hostname()` 改为 ETE 自有 config 目录中持久化的随机 UUID；DeviceName 继续使用 hostname。缺失/损坏 identity 文件会原子重建，升级保留，clean profile 生成新值；不迁移旧 hostname DeviceId，不修改服务器 Device/Session、token、capability、WebSocket 或播放链。`app.setName/productName` 不在本分支范围。
+
+新增 identity helper 与 9 项回归测试；当前实现 targeted identity tests 9/9、全量 `npm test` 110/110、JS syntax 和 `git diff --check` 已通过。source build、runtime provenance、package verify 和 Windows candidate installer 在提交后执行并单独记录。
+
 ## 2026-09-15 — Direct app launch Daily-use Candidate 修复（REAL PASS — direct app launch）
 
 原 `4761a2440e9ab1df0b3c6d01765f26f9560d9bea` 候选记录为 `NON-BLOCKING FAIL — launcher UX`，原因是 `PowerShell wrapper caused visible console flash and startup delay`。本分支 `fix/direct-app-launch` 将正式入口改为直接启动 `Emby.Theater.exe`，并把原 `Start-Enhanced` 的目录创建与缺失文件 seed 迁入 Electron main-process bootstrap；保留 `ProgramDataPath` 和用户已有配置语义，不修改 PlaybackManager、STRM resolver、CD2、Mount、libmpv、Session、WebSocket 或播放策略。
