@@ -1,13 +1,17 @@
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
-        define(['./mount-resolver.js', './cd2-resolver.js'], factory);
+        define(['./mount-resolver.js', './cd2-resolver.js', './path-rules.js'], factory);
     } else if (typeof module === 'object' && module.exports) {
-        module.exports = factory(require('./mount-resolver'), require('./cd2-resolver'));
+        module.exports = factory(require('./mount-resolver'), require('./cd2-resolver'), require('./path-rules'));
     } else {
-        root.strmResolver = factory(root.mountResolver, root.cd2Resolver);
+        root.strmResolver = factory(root.mountResolver, root.cd2Resolver, root.strmPathRules);
     }
-}(this, function (mountResolver, cd2Resolver) {
+}(this, function (mountResolver, cd2Resolver, pathRules) {
     'use strict';
+
+    var DEFAULT_TOTAL_BUDGET_MS = 750;
+    var DEFAULT_ORDER = ['direct-url', 'cd2-http', 'mount', 'native'];
+    var MOUNT_FIRST_ORDER = ['mount', 'direct-url', 'cd2-http', 'native'];
 
     function isObject(value) {
         return value !== null && typeof value === 'object';
@@ -92,12 +96,78 @@
         return {context: context, result: null};
     }
 
+    function hasPersistentConfig(config) {
+        return isObject(config) && Number(config.version) === 1 && Array.isArray(config.rules);
+    }
+
+    function selectRule(context, config) {
+        var sourcePath = context && context.sourcePath;
+        var sourcePrefix = pathRules.normalizeMappingPrefix(sourcePath);
+        var values = sourcePrefix ? [sourcePath] : [context && context.sidecarPath];
+        var best = null;
+        var bestLength = -1;
+        var bestValueIndex = values.length;
+
+        if (!hasPersistentConfig(config)) return null;
+        config.rules.forEach(function (rule, ruleIndex) {
+            var prefix;
+            var valueIndex;
+            if (!rule || rule.enabled === false || rule.originState === 'DISABLED') return;
+            prefix = pathRules.normalizeMappingPrefix(rule.sourcePrefix);
+            if (!prefix) return;
+            for (valueIndex = 0; valueIndex < values.length; valueIndex++) {
+                if (!pathRules.prefixMatches(values[valueIndex], prefix)) continue;
+                if (!best || prefix.length > bestLength ||
+                    (prefix.length === bestLength && valueIndex < bestValueIndex) ||
+                    (prefix.length === bestLength && valueIndex === bestValueIndex && ruleIndex < best.index)) {
+                    best = {rule: rule, index: ruleIndex};
+                    bestLength = prefix.length;
+                    bestValueIndex = valueIndex;
+                }
+                break;
+            }
+        });
+        return best && best.rule;
+    }
+
+    function orderForRule(rule) {
+        if (!rule || rule.strategy === 'cloud-first') return DEFAULT_ORDER.slice();
+        if (rule.strategy === 'mount-first') return MOUNT_FIRST_ORDER.slice();
+        if (rule.strategy === 'custom' && Array.isArray(rule.order) && rule.order.length === 4) {
+            return rule.order.slice();
+        }
+        return DEFAULT_ORDER.slice();
+    }
+
+    function persistentNativeResult(context, reason, rule, cd2Reason) {
+        var result = nativeResult(context.nativeSource, reason, true);
+        if (rule && rule.id) result.ruleId = rule.id;
+        if (cd2Reason) result.cd2Reason = cd2Reason;
+        return result;
+    }
+
     function resolve(options, dependencies) {
         var prepared = prepare(options);
         var context = prepared.context;
+        var config = dependencies && dependencies.config;
+        var rule;
         var result;
 
         if (prepared.result) return prepared.result;
+
+        if (hasPersistentConfig(config)) {
+            if (config.enabled === false) return persistentNativeResult(context, 'resolver_disabled');
+            rule = selectRule(context, config);
+            if (!rule) return persistentNativeResult(context, 'no_matching_rule');
+            try {
+                result = mountResolver.resolve(context, Object.assign({}, dependencies || {}, {rule: rule}));
+                result.isStrm = true;
+                result.ruleId = rule.id;
+                return result;
+            } catch (err) {
+                return persistentNativeResult(context, 'native_fallback', rule);
+            }
+        }
 
         try {
             result = mountResolver.resolve(context, dependencies);
@@ -111,11 +181,65 @@
     async function resolveAsync(options, dependencies) {
         var prepared = prepare(options);
         var context = prepared.context;
+        var config = dependencies && dependencies.config;
+        var rule;
+        var order;
+        var deadlineAt;
+        var now;
         var candidates;
         var cd2Reason;
         var result;
 
         if (prepared.result) return prepared.result;
+
+        if (hasPersistentConfig(config)) {
+            if (config.enabled === false) return persistentNativeResult(context, 'resolver_disabled');
+            rule = selectRule(context, config);
+            if (!rule) return persistentNativeResult(context, 'no_matching_rule');
+            order = orderForRule(rule);
+            now = dependencies && typeof dependencies.now === 'function' ? dependencies.now : Date.now;
+            deadlineAt = now() + DEFAULT_TOTAL_BUDGET_MS;
+
+            try {
+                for (var stageIndex = 0; stageIndex < order.length; stageIndex++) {
+                    var stage = order[stageIndex];
+                    if (stage === 'native') return persistentNativeResult(context, 'native_fallback', rule, cd2Reason);
+                    if (stage === 'mount') {
+                        result = mountResolver.resolve(context, Object.assign({}, dependencies || {}, {rule: rule}));
+                        if (result && result.type === 'local') {
+                            result.isStrm = true;
+                            result.ruleId = rule.id;
+                            return result;
+                        }
+                        continue;
+                    }
+                    if (stage === 'direct-url' || stage === 'cd2-http') {
+                        if (!candidates) candidates = mountResolver.getCandidates(context, dependencies);
+                        if (!candidates.length) continue;
+                        result = await cd2Resolver.resolve(context, {
+                            cd2Transport: dependencies && dependencies.cd2Transport,
+                            requestId: dependencies && dependencies.requestId,
+                            signal: dependencies && dependencies.signal,
+                            candidates: candidates,
+                            ruleId: rule.id,
+                            mode: stage === 'direct-url' ? 'direct' : 'same-origin',
+                            deadlineAt: deadlineAt
+                        });
+                        if (result && result.type === 'url') {
+                            result.isStrm = true;
+                            result.localExists = false;
+                            result.ruleId = rule.id;
+                            return result;
+                        }
+                        cd2Reason = result && result.reason;
+                    }
+                }
+                return persistentNativeResult(context, 'native_fallback', rule, cd2Reason);
+            } catch (error) {
+                if (error && error.name === 'AbortError') throw error;
+                return persistentNativeResult(context, 'native_fallback', rule, cd2Reason);
+            }
+        }
 
         try {
             candidates = mountResolver.getCandidates(context, dependencies);
@@ -146,6 +270,8 @@
 
     return {
         isStrm: isStrm,
+        selectRule: selectRule,
+        orderForRule: orderForRule,
         resolve: resolve,
         resolveAsync: resolveAsync,
         resolveStrm: resolve

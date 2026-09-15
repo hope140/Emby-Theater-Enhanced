@@ -38,6 +38,17 @@ if ($TestStopBeforePlayer) { $info.EnvironmentVariables['ETE_TEST_STOP_BEFORE_PL
 if ($TestCd2) { $info.EnvironmentVariables['ETE_TEST_CD2_MODE'] = 'hit'; $info.EnvironmentVariables['ETE_TEST_CD2_EXPECT'] = 'hit' }
 if ($TestCd2Direct) { $info.EnvironmentVariables['ETE_TEST_CD2_MODE'] = 'direct'; $info.EnvironmentVariables['ETE_TEST_CD2_EXPECT'] = 'direct' }
 if ($TestCd2Miss) { $info.EnvironmentVariables['ETE_TEST_CD2_MODE'] = 'miss'; $info.EnvironmentVariables['ETE_TEST_CD2_EXPECT'] = 'miss' }
+if ($TestCd2 -or $TestCd2Direct -or $TestCd2Miss) {
+    # The fake service is still exercised through the product's persistent
+    # config path. These values are test-only bootstrap input and are removed
+    # by main.js before the renderer is loaded.
+    $info.EnvironmentVariables['ETE_CD2_ENABLED'] = '1'
+    $info.EnvironmentVariables['ETE_CD2_ORIGIN'] = 'http://127.0.0.1:19798'
+    $info.EnvironmentVariables['ETE_CD2_TOKEN'] = 'fixture-test-token'
+    $info.EnvironmentVariables['ETE_CD2_LOCAL_PREFIX'] = [IO.Path]::GetDirectoryName($fixture)
+    $info.EnvironmentVariables['ETE_CD2_CLOUD_PREFIX'] = '/fixture'
+    $info.EnvironmentVariables['ETE_TEST_MOUNT_SIDECAR'] = $fixture + '.strm'
+}
 if ($TestPipeline) {
     foreach ($proxyName in @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy')) { $info.EnvironmentVariables.Remove($proxyName) }
     $info.EnvironmentVariables['NO_PROXY'] = '127.0.0.1,localhost'

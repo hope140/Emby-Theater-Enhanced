@@ -1,5 +1,29 @@
 # 开发日志
 
+## 2026-09-15 — Fix ETE_CD2_ENABLED legacy migration
+
+在 `bootstrapLegacy()` 中修复 legacy 开关映射：`ETE_CD2_ENABLED` 现在只迁移为 `config.cd2.enabled`，bootstrap 时 top-level `config.enabled` 始终为 `true`。因此旧环境 `ETE_CD2_ENABLED=0` 只关闭 CloudDrive2 service，STRM resolver 仍保持启用并可在 CD2 disabled/miss 后进入 Mount → Native；`ETE_CD2_ENABLED=1` 同时得到 global resolver enabled 与 CD2 enabled。新设置页保存的 top-level `enabled` 语义和 persistent USER 配置优先级保持不变，resolver stage architecture 未修改。
+
+新增 regression test 覆盖 `ETE_CD2_ENABLED=0`、有效 source/mount mapping、CD2 disabled 后 Mount 命中和不返回 `resolver_disabled`；既有 `ETE_CD2_ENABLED=1` 测试同时确认 global resolver 与 CD2 均启用。Node targeted tests 21/21、`npm test` 98/98、JavaScript syntax 和 `git diff --check` 通过。最终 HEAD 的 build、runtime provenance 和 package verify 通过；Final-head synthetic runtime smoke 记录为 `NOT COMPLETED — hidden Electron smoke timeout`，本轮未重新运行或重试。REAL settings UI 继续记录为 `NOT COVERED — native window automation unavailable`，真实服务器 cloud-first/mount-first playback 继续 NOT COVERED。
+
+## 2026-09-15 — Fix STRM rule-selection identity precedence
+
+在 `feat/strm-resolver-settings@2956267` 上修复 `selectRule()`：可识别的绝对 `sourcePath` 现在独占 longest-prefix match；source 没有命中时直接返回 null，不再由更长的 `Item.Path` sidecar rule 接管。只有 HTTP/非绝对 source path 才使用 sidecar identity fallback。Windows/UNC case-insensitive、POSIX case-sensitive 和目录边界保持不变。
+
+新增 A/B/C regression tests，分别覆盖 source 命中优先、有效 source 无命中禁止 sidecar 接管、HTTP source 允许 sidecar fallback。未修改 PlaybackManager、Session、libmpv ownership、CD2 service 架构或配置 schema。
+
+验证：settings targeted 20/20；`npm test` 97/97；相关 JS syntax 与 `git diff --check` 通过；最终 HEAD 的 build、runtime provenance 和 package verify 通过。较早候选 HEAD `295626753089de9f70c2cb28b5c5954be51b3843` 的 synthetic runtime pipeline PASS 证据继续保留，包含 DirectUrl fake、CD2 HTTP fake、CD2 miss → Mount/Native fallback、PlaybackManager / Session / controls / reporting / cleanup，但不冒充最终 HEAD 验证。source identity precedence 修复后最后一次 hidden Electron synthetic runtime smoke 因 timeout 未完成，记录为 `NOT COMPLETED — hidden Electron smoke timeout`；按测试限制未重试。该 timeout 不判定产品功能失败，也不宣称最终 HEAD 已重新通过 synthetic runtime。REAL settings UI 继续记录为 `NOT COVERED — native window automation unavailable`。
+
+## 2026-09-15 — STRM resolver settings candidate
+
+Model Tier：2。Reason：跨 main-process persistent config/secret IPC、resolver rule ordering、Mount prefix replacement、DirectUrl/same-origin deadline reuse 和现有 libmpv source-only boundary；没有改变 PlaybackManager、Session、WebSocket 或 player ownership。Escalated：no。
+
+基于 `main@ca9ca9de58c37b8f5f3782dd1e45e9efc2071495` 创建 `feat/strm-resolver-settings` 独立 worktree。新增 `strm-config-store.js`、`strm-config-ipc.js`、`path-rules.js`、settings route/page/style/client 和 targeted tests。配置与 secret 分离，GET 只返回 tokenConfigured；legacy env 仅做首次 AUTO bootstrap。规则支持 source/mount/cloud 三种独立路径、最长前缀、Windows/UNC case-insensitive、POSIX case-sensitive、cloud-first、mount-first、custom order 以及 AUTO/USER/DISABLED 保护。
+
+CD2 service 保留现有 DirectUrl 安全 contract，并以 `direct` / `same-origin` mode 在同一 service 中复用 Find 结果和 750ms absolute deadline。Mount stage 增加 deterministic sourcePrefix → mountPrefix replacement；Native、Transcode、Abort、superseded 和 late-response 语义保持原行为。
+
+验证：`npm test` 94/94；settings targeted 17/17；JavaScript syntax、PowerShell syntax、`git diff --check`、prepare、build、runtime provenance 和 package verify 均按本分支执行。synthetic frozen runtime 的 DirectUrl、CD2 HTTP、CD2 miss fallback、PlaybackManager/Session/controls/reporting/cleanup 通过。native-window automation 不可用，真实 settings UI、真实服务器 cloud-first/mount-first playback 未宣称。
+
 ## 2026-09-15 — Clean-room / readiness foundation hardening
 
 Model Tier：2。Reason：跨 prepare/build/provenance 与 embedded Pepper readiness observer、真实 Session/playback evidence 的边界审计；产品播放代码保持冻结。

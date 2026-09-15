@@ -1,14 +1,14 @@
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
-        define([], function () {
-            return factory();
+        define(['./path-rules.js'], function (pathRules) {
+            return factory(pathRules, null);
         });
     } else if (typeof module === 'object' && module.exports) {
-        module.exports = factory(require('fs'));
+        module.exports = factory(require('./path-rules'), require('fs'));
     } else {
-        root.mountResolver = factory();
+        root.mountResolver = factory(root.strmPathRules, null);
     }
-}(this, function (defaultFileSystem) {
+}(this, function (pathRules, defaultFileSystem) {
     'use strict';
 
     var mediaExtensions = {
@@ -200,14 +200,11 @@
             return dependencies.fs;
         }
 
-        if (defaultFileSystem) {
-            return defaultFileSystem;
-        }
-
         if (typeof window !== 'undefined' && window.fs) {
             return window.fs;
         }
 
+        if (defaultFileSystem) return defaultFileSystem;
         return null;
     }
 
@@ -297,21 +294,47 @@
         return visitCandidates(context, dependencies).candidates;
     }
 
+    function getMountCandidates(context, dependencies) {
+        var rule = dependencies && dependencies.rule;
+        var candidates = [];
+        var bases;
+
+        if (!rule) return getCandidates(context, dependencies);
+        if (!rule.sourcePrefix || !rule.mountPrefix || rule.enabled === false || rule.originState === 'DISABLED') {
+            return candidates;
+        }
+
+        bases = getCandidates(context, dependencies);
+        bases.forEach(function (candidate) {
+            var mapped = pathRules.replacePrefix(candidate, rule.sourcePrefix, rule.mountPrefix);
+            if (mapped && candidates.indexOf(mapped) < 0) candidates.push(mapped);
+        });
+        return candidates;
+    }
+
     function resolve(context, dependencies) {
         var nativeSource = context && context.nativeSource;
         var fileSystem = getFileSystem(dependencies);
+        var rule = dependencies && dependencies.rule;
         var visited = visitCandidates(context, dependencies, function (candidate) {
+            var mapped = rule
+                ? pathRules.replacePrefix(candidate, rule.sourcePrefix, rule.mountPrefix)
+                : candidate;
+            if (!mapped) return null;
             // Absolute POSIX paths can be server-side source identities on a
             // Windows client. They remain CD2 candidates, but must never be
             // probed through the local Windows filesystem.
-            if (isPosixLocalPath(candidate)) {
+            if (isPosixLocalPath(mapped)) {
                 return null;
             }
-            return exists(fileSystem, candidate)
-                ? makeResult('local', candidate, 'mount_hit', true)
+            return exists(fileSystem, mapped)
+                ? makeResult('local', mapped, 'mount_hit', true)
                 : null;
         });
 
+        if (rule && (!rule.mountPrefix || rule.enabled === false || rule.originState === 'DISABLED')) {
+            return makeResult('native', nativeSource, 'mount_not_configured', false);
+        }
         if (visited.result) return visited.result;
         if (visited.failed) return makeResult('native', nativeSource, 'parse_failed', false);
         return makeResult('native', nativeSource, 'mount_missing', false);
@@ -320,6 +343,7 @@
     return {
         deriveSidecarStem: deriveSidecarStem,
         getCandidates: getCandidates,
+        getMountCandidates: getMountCandidates,
         isPosixLocalPath: isPosixLocalPath,
         isWindowsLocalPath: isWindowsLocalPath,
         resolve: resolve
