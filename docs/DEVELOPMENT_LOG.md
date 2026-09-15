@@ -1,5 +1,33 @@
 # 开发日志
 
+## 2026-09-15 — Direct app launch 真实安装验收收尾
+
+Model Tier：1。Reason：本轮仅记录用户完成的 Windows 真实安装后四入口手工验收并创建 PR，不修改产品代码，不重新 build/package/test/smoke。Escalated：no。
+
+原候选验收记录为 `NON-BLOCKING FAIL — launcher UX`，问题是 `PowerShell wrapper caused visible console flash and startup delay`。用户已确认新候选四种真实入口全部通过：installer post-install Launch、desktop shortcut、Start Menu shortcut、直接 `Emby.Theater.exe` 均为 `REAL PASS`；四入口均无命令窗口闪烁，启动体验正常，既有 Emby 登录状态保留。
+
+本项结论更新为 `REAL PASS — direct app launch`。Daily-use Candidate 整体不升级为最终 `READY`；其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目仍按原有 REAL/SYNTHETIC/NOT COVERED 证据记录。保留 code/package HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的代码、build/provenance/package/integrity 证据；后续 `8bb79341490aaba3404db2a6411510d66a7b8bef` 及本轮文档修正均为 docs-only，不改变 artifact 内容；hidden Electron smoke 未重跑。
+
+## 2026-09-15 — Direct app launch Daily-use Candidate 修复
+
+Model Tier：1。Reason：范围限定为 Electron main-process bootstrap、installer direct entry、runtime copy/provenance 和启动 UX 验证，不触碰播放链或 Session 生命周期。Escalated：no。
+
+原 `4761a2440e9ab1df0b3c6d01765f26f9560d9bea` Daily-use Candidate 的启动验收记录为 `NON-BLOCKING FAIL — launcher UX`，原因是 `PowerShell wrapper caused visible console flash and startup delay`。本分支 `fix/direct-app-launch` 将开始菜单、桌面快捷方式和 `[Run]` 入口统一改为直接启动 `{app}\Emby.Theater.exe`。
+
+新增 `src/electronapp/enhanced/bootstrap.js`，由 main process 在窗口创建前按实际 packaged layout `{runtime}\electronapp\main.js` → `{runtime}\config\system.xml` 执行幂等初始化：创建 `%APPDATA%\EmbyTheaterEnhanced\config` 与 `cec-driver`，只为缺失的 `system.xml` seed，为缺失的 `cec-driver\cancel` 创建空文件；既有用户文件保持原样。`ProgramDataPath` 未改，未引入外部进程。`Start-Enhanced.ps1/.cmd` 保留为源码工具，但不再由 `tools/build.ps1` 复制进正式 runtime，provenance scope 同步移除 wrapper entries。
+
+验证：bootstrap/installer targeted 3/3；相关 targeted 合并检查 5/5；全量 `npm test` 101/101；68 个 JavaScript/CJS syntax、11 个 PowerShell syntax、`git diff --check` 通过。候选 runtime/package 路径固定，code/package HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的 source build、provenance、package verify 和 Inno payload integrity 均通过；runtime 实际 2,123 文件、payload entries 2,122，解包 `{app}` 2,123 文件 missing/extra/hash mismatch=0，legacy launcher=0，packaged bootstrap seed/preserve 隔离检查通过。后续 docs-only commit 不要求重新 build/package/test。真实安装后的桌面、开始菜单、安装完成 Launch 和直接 exe 四入口已记录为 `REAL PASS`，但整体 Daily-use Candidate 仍不写最终 `READY`。
+
+## 2026-09-15 — Daily-use Candidate 验证与打包准备
+
+Model Tier：1。Reason：范围限定为最新 `origin/main` 的 baseline verification、runtime/package preparation 和 acceptance matrix；不改变产品行为。Escalated：no。
+
+fetch 后确认 `main == origin/main == 4761a2440e9ab1df0b3c6d01765f26f9560d9bea`。快进前工作树 clean，无 unexpected local patch。按既有工具链从当前 HEAD 构建 `dist/EmbyTheaterEnhanced-0.1.1-daily-use-candidate-4761a24`，Build 完成，runtime 实际 2,124 文件，provenance 通过（source commit 精确匹配、785 scope entries、3/3 build overlays、1/1 prepared artifact）。
+
+验证结果：STRM/settings targeted 21/21；`npm test` 98/98；66 个 JS/CJS `node --check`；11 个 PowerShell parser checks；`git diff --check`；`tools/package.ps1 -VerifyOnly` 通过。使用现有项目内 Inno compiler 在独立 staging 目录生成 setup，再复制为候选文件名 `dist/EmbyTheaterEnhanced-0.1.1-daily-use-candidate-4761a24-setup.exe`，大小 125,175,083 bytes，SHA256 `f3088aa87a5fd78f6395b926ccbbf6e16b67bb8085f648625a7949c2b3d5a72a`。innounp integrity test 通过；解包 `{app}` 2,124 文件与 runtime 逐文件 hash 对齐，missing/extra/mismatch 均为 0。没有覆盖旧 0.1.1 setup。
+
+Acceptance matrix 已建立于 `docs/DAILY_USE_CANDIDATE.md`。A/C/F 的当前证据为 synthetic；B/D/E 复用已标注 source HEAD 的历史真实证据，未冒充 `4761…` 当前候选实测。历史 final-head hidden Electron smoke 按要求未重跑，继续记录 `NOT COMPLETED — hidden Electron smoke timeout`；真实 settings UI、真实 Mount、当前候选完整 Emby playback、轨道操作和 endurance 留给手动 checklist。本轮不提交、不推送、不创建 PR、release 或 tag。
+
 ## 2026-09-15 — Fix ETE_CD2_ENABLED legacy migration
 
 在 `bootstrapLegacy()` 中修复 legacy 开关映射：`ETE_CD2_ENABLED` 现在只迁移为 `config.cd2.enabled`，bootstrap 时 top-level `config.enabled` 始终为 `true`。因此旧环境 `ETE_CD2_ENABLED=0` 只关闭 CloudDrive2 service，STRM resolver 仍保持启用并可在 CD2 disabled/miss 后进入 Mount → Native；`ETE_CD2_ENABLED=1` 同时得到 global resolver enabled 与 CD2 enabled。新设置页保存的 top-level `enabled` 语义和 persistent USER 配置优先级保持不变，resolver stage architecture 未修改。

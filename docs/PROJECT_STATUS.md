@@ -1,5 +1,23 @@
 # 项目状态
 
+## 2026-09-15 — Direct app launch Daily-use Candidate 修复（REAL PASS — direct app launch）
+
+原 `4761a2440e9ab1df0b3c6d01765f26f9560d9bea` 候选记录为 `NON-BLOCKING FAIL — launcher UX`，原因是 `PowerShell wrapper caused visible console flash and startup delay`。本分支 `fix/direct-app-launch` 将正式入口改为直接启动 `Emby.Theater.exe`，并把原 `Start-Enhanced` 的目录创建与缺失文件 seed 迁入 Electron main-process bootstrap；保留 `ProgramDataPath` 和用户已有配置语义，不修改 PlaybackManager、STRM resolver、CD2、Mount、libmpv、Session、WebSocket 或播放策略。
+
+安装器的开始菜单、桌面快捷方式和安装完成 Launch 均直接指向 `{app}\Emby.Theater.exe`；`tools/build.ps1` 不再复制 `Start-Enhanced.ps1/.cmd`，source tool 文件暂保留。候选 runtime 固定为 `dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch`，installer 固定为 `dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch-setup.exe`；artifact 绑定 code/package HEAD `b16273c71de5e671f1c38e4b355edb72382ec137`，后续 `8bb79341490aaba3404db2a6411510d66a7b8bef` 及本轮文档修正均为 docs-only，不改变 artifact 内容。provenance、package verify、Inno archive integrity 和逐文件 payload comparison 均通过。
+
+当前自动验证：bootstrap/installer targeted 3/3，相关 targeted 合并检查 5/5，`npm test` 101/101，JavaScript syntax 68/68，PowerShell syntax 11/11，`git diff --check` 通过；code/package HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的 source build、provenance、package verify、archive integrity、payload comparison 和 packaged bootstrap 隔离检查均通过。后续 docs-only commit 不要求重新生成 artifact。原候选失败原因保留为历史验收记录；本轮仅关闭 launcher UX，不改变整体 Daily-use Candidate 的最终 READY 判定。
+
+真实手工验收已完成并通过：installer post-install Launch、桌面快捷方式、开始菜单快捷方式、直接 `Emby.Theater.exe` 均为 `REAL PASS`。四入口均无 PowerShell/CMD 窗口闪烁，启动体验正常，既有 Emby 登录状态保留。本轮只关闭 launcher UX 问题；Daily-use Candidate 整体仍未达到最终 `READY`，其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目保持原有验收边界。
+
+## 2026-09-15 — Daily-use Candidate prepared from latest origin/main
+
+完成首个 Daily-use Candidate 的验证与打包准备。fetch 后 `main` 快进到 `origin/main@4761a2440e9ab1df0b3c6d01765f26f9560d9bea`，快进前工作树干净，没有未预期 local patch。当前候选 runtime 为 `dist/EmbyTheaterEnhanced-0.1.1-daily-use-candidate-4761a24`，实际 2,124 文件；安装包为 `dist/EmbyTheaterEnhanced-0.1.1-daily-use-candidate-4761a24-setup.exe`，125,175,083 bytes，SHA256 `f3088aa87a5fd78f6395b926ccbbf6e16b67bb8085f648625a7949c2b3d5a72a`。旧 0.1.1 setup 未覆盖。
+
+自动验证全部通过：STRM/settings targeted 21/21、全量 `npm test` 98/98、66 个 JS/CJS syntax、11 个 PowerShell syntax、`git diff --check`、source build、runtime provenance（785 product scope，3/3 overlay，1/1 prepared artifact）和 `tools/package.ps1 -VerifyOnly`（2,123 payload entries）。Inno archive integrity 通过，解包 `{app}` 2,124 文件与 runtime 逐文件 SHA256 一致，缺失/额外/mismatch 均为 0。按用户要求没有重跑历史 hidden Electron smoke；该证据仍为 `NOT COMPLETED — hidden Electron smoke timeout`。验收矩阵和手动清单见 [DAILY_USE_CANDIDATE](DAILY_USE_CANDIDATE.md)。
+
+本轮不创建 PR、release 或 tag，不修改产品代码。当前候选可交给用户执行手动日常使用验收；真实 settings UI、真实 Mount、当前 HEAD 的真实完整播放链、音视频轨道切换和 endurance 仍按文档留待手动覆盖。
+
 ## 2026-09-15 — STRM resolver settings candidate
 
 基于 `main@ca9ca9de58c37b8f5f3782dd1e45e9efc2071495` 创建独立 worktree/branch `feat/strm-resolver-settings`。本轮将 STRM / Mount / CloudDrive2 / DirectUrl resolver 配置产品化：新增 schema version 1 的 main-process persistent config store、独立 secret 文件、trusted config IPC、最长前缀规则、cloud-first/mount-first/custom strategy、AUTO/USER/DISABLED 生命周期和 `mpvplayer/strm.html` 设置入口。PlaybackManager、Session、PlaySessionId、WebSocket、播放报告和 embedded libmpv ownership 未修改。

@@ -58,8 +58,6 @@ $configText = [IO.File]::ReadAllText($configPath)
 $configText = $configText.Replace('<add key="ProgramDataPath" value=""/>', '<add key="ProgramDataPath" value="%ApplicationData%\EmbyTheaterEnhanced"/>')
 if (-not $configText.Contains('%ApplicationData%\EmbyTheaterEnhanced')) { throw 'ProgramDataPath anchor mismatch.' }
 [IO.File]::WriteAllText($configPath, $configText, $utf8)
-Copy-Item -LiteralPath (Join-Path $root 'tools/Start-Enhanced.ps1') -Destination $destination
-Copy-Item -LiteralPath (Join-Path $root 'tools/Start-Enhanced.cmd') -Destination $destination
 & node (Join-Path $root 'tools/runtime-provenance.cjs') write $root $destination $sourceCommit
 if ($LASTEXITCODE -ne 0) { throw 'Runtime provenance generation failed.' }
 $files = @(Get-ChildItem -LiteralPath $destination -Recurse -File | Sort-Object FullName | ForEach-Object {
