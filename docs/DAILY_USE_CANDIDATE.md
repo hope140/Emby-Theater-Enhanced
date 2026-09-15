@@ -13,7 +13,7 @@
 - Runtime：`dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch`
 - Installer：`dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch-setup.exe`
 
-候选 artifact 必须绑定本分支最终 HEAD；runtime provenance、`package.ps1 -VerifyOnly`、Inno archive integrity 和 `{app}` payload comparison 均需以该 source commit 重新验证。artifact 数量、大小和 SHA256 以最终交付记录为准。
+候选 artifact 已绑定本分支最终 HEAD；runtime provenance、`package.ps1 -VerifyOnly`、Inno archive integrity 和 `{app}` payload comparison 均通过。artifact 数量、大小和 SHA256 以最终交付记录为准。
 
 当前自动验证已覆盖 bootstrap seed/preserve、installer direct-entry、provenance scope、runtime bootstrap 和完整 Node 测试；新候选尚未完成安装后的四入口手工验收。最终状态保持 `PENDING MANUAL`，手工确认桌面、开始菜单、安装完成 Launch 与直接 exe 均通过后，才能标记最终 PASS。
 
