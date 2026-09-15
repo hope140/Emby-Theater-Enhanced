@@ -8,11 +8,15 @@
     var nativeImage = electron.nativeImage;
     var path = require('path');
     var appBootstrap = require('./enhanced/bootstrap');
+    var deviceIdentity = require('./device-identity');
 
-    appBootstrap.bootstrap({
+    var appBootstrapState = appBootstrap.bootstrap({
         appDataPath: app.getPath('appData'),
         runtimeRoot: path.resolve(__dirname, '..')
     });
+    var persistentDeviceId = deviceIdentity.getOrCreateDeviceId(
+        path.join(appBootstrapState.configDirectory, 'device-identity.json')
+    );
 
     // Keep a global reference of the window object, if you don't, the window will
     // be closed automatically when the JavaScript object is garbage collected.
@@ -554,7 +558,7 @@
                         name: app.name,
                         version: app.getVersion(),
                         deviceName: os.hostname(),
-                        deviceId: os.hostname(),
+                        deviceId: persistentDeviceId,
                         plugins: pluginFiles.filter(function (f) {
 
                             return f.indexOf('.js') != -1;
