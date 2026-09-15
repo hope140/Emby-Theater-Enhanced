@@ -139,6 +139,16 @@
         return DEFAULT_ORDER.slice();
     }
 
+    function routeForResult(result) {
+        var sourceKind = result && result.sourceKind;
+        var type = result && result.type;
+        if (sourceKind === 'direct-url') return 'direct-url';
+        if (type === 'url' && sourceKind === 'cd2-url') return 'cd2-http';
+        if (type === 'local') return 'mount';
+        if (type === 'native') return 'native';
+        return 'unknown';
+    }
+
     function persistentNativeResult(context, reason, rule, cd2Reason) {
         var result = nativeResult(context.nativeSource, reason, true);
         if (rule && rule.id) result.ruleId = rule.id;
@@ -272,6 +282,7 @@
         isStrm: isStrm,
         selectRule: selectRule,
         orderForRule: orderForRule,
+        routeForResult: routeForResult,
         resolve: resolve,
         resolveAsync: resolveAsync,
         resolveStrm: resolve

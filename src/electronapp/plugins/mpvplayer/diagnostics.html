@@ -1,0 +1,29 @@
+<div is="emby-scroller" class="view flex flex-direction-column scrollFrameY flex-grow" data-mousewheel="true" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="card" data-bindheader="true">
+    <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page settingsContainer ete-diagnostics-settings">
+        <section class="ete-diagnostics-hero" aria-labelledby="ete-diagnostics-title">
+            <div>
+                <h1 id="ete-diagnostics-title">诊断与日志</h1>
+                <p>自动保存可供 AI 分析的客户端诊断信息，日志写入失败不会影响播放。</p>
+            </div>
+            <span class="ete-diagnostics-hero-mark" aria-hidden="true">LOG</span>
+        </section>
+
+        <section class="ete-diagnostics-panel" aria-labelledby="ete-diagnostics-status-title">
+            <h2 id="ete-diagnostics-status-title">状态</h2>
+            <div class="ete-diagnostics-row"><span>诊断日志</span><strong class="diagnosticsEnabled">已启用</strong></div>
+            <div class="ete-diagnostics-row"><span>日志目录</span><code class="diagnosticsDirectory">%APPDATA%\EmbyTheaterEnhanced\logs</code></div>
+            <div class="ete-diagnostics-row"><span>当前日志大小</span><span class="diagnosticsSize">未知</span></div>
+            <p class="fieldDescription">日志默认自动脱敏，只保留路由、阶段、错误和必要的运行环境摘要。</p>
+        </section>
+
+        <section class="ete-diagnostics-panel" aria-labelledby="ete-diagnostics-actions-title">
+            <h2 id="ete-diagnostics-actions-title">操作</h2>
+            <div class="ete-diagnostics-actions">
+                <button type="button" is="emby-button" class="raised button-submit btnExportDiagnostics">导出诊断日志</button>
+                <button type="button" is="emby-button" class="btnOpenDiagnostics">打开日志目录</button>
+                <button type="button" is="emby-button" class="btnClearDiagnostics">清空日志</button>
+            </div>
+            <div class="diagnosticsState secondaryText" role="status" aria-live="polite"></div>
+        </section>
+    </div>
+</div>

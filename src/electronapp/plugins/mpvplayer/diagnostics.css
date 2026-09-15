@@ -1,0 +1,111 @@
+.ete-diagnostics-settings {
+    max-width: 860px;
+}
+
+.ete-diagnostics-settings h1,
+.ete-diagnostics-settings h2 {
+    margin-top: 0;
+}
+
+.ete-diagnostics-hero {
+    align-items: center;
+    background: rgba(0, 164, 220, .12);
+    background: color-mix(in srgb, var(--theme-primary-color, #00a4dc) 12%, transparent);
+    border-left: 4px solid var(--theme-primary-color, #00a4dc);
+    border-radius: 4px;
+    display: flex;
+    gap: 24px;
+    justify-content: space-between;
+    margin: 0 0 24px;
+    padding: 20px 24px;
+}
+
+.ete-diagnostics-hero p {
+    margin: 8px 0 0;
+}
+
+.ete-diagnostics-hero-mark {
+    color: var(--theme-primary-color, #00a4dc);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .16em;
+    white-space: nowrap;
+}
+
+.ete-diagnostics-panel {
+    border: 1px solid var(--theme-primary-color-alpha, rgba(0, 164, 220, .25));
+    border-radius: 4px;
+    margin-bottom: 24px;
+    padding: 20px 24px;
+}
+
+.ete-diagnostics-panel h2 {
+    color: var(--theme-primary-color, #00a4dc);
+    font-size: 1.1em;
+    margin-bottom: 16px;
+}
+
+.ete-diagnostics-row {
+    align-items: center;
+    border-bottom: 1px solid rgba(128, 128, 128, .22);
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    min-height: 42px;
+}
+
+.ete-diagnostics-row:last-of-type {
+    border-bottom: 0;
+}
+
+.ete-diagnostics-row code {
+    color: var(--theme-secondary-text-color, #999);
+    font-family: Consolas, "Courier New", monospace;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.ete-diagnostics-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.ete-diagnostics-settings button {
+    cursor: pointer;
+    min-height: 40px;
+}
+
+.ete-diagnostics-settings button:focus-visible {
+    outline: 2px solid var(--theme-primary-color, #00a4dc);
+    outline-offset: 2px;
+}
+
+.ete-diagnostics-settings [role="alert"] {
+    color: var(--theme-error-color, #d9534f);
+}
+
+@media (max-width: 700px) {
+    .ete-diagnostics-hero {
+        align-items: flex-start;
+        padding: 16px;
+    }
+
+    .ete-diagnostics-panel {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .ete-diagnostics-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+        justify-content: center;
+        padding: 8px 0;
+    }
+
+    .ete-diagnostics-row code {
+        text-align: left;
+    }
+}

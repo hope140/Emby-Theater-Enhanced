@@ -46,7 +46,7 @@ try {
     if (-not $launcher.WaitForExit(15000)) { throw 'Shortcut launcher did not exit.' }
     Start-Sleep -Seconds 8
     $processes = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target + '\',[StringComparison]::OrdinalIgnoreCase) })
-    $diag = Join-Path $profileRoot 'data/electron/enhanced-diagnostics.jsonl'
+    $diag = Join-Path $profileRoot 'logs/ete-client.jsonl'
     $result.launch = [ordered]@{launcherExitCode=$launcher.ExitCode;hostCount=@($processes|Where-Object {$_.Name -eq 'Emby.Theater.exe'}).Count;electronCount=@($processes|Where-Object {$_.Name -eq 'electron.exe'}).Count;diagnosticLog=(Test-Path -LiteralPath $diag)}
     Write-Result
     if ($result.launch.hostCount -lt 1 -or $result.launch.electronCount -lt 1 -or -not $result.launch.diagnosticLog) { throw 'Installed shortcut launch failed.' }

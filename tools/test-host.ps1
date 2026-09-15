@@ -15,11 +15,18 @@ $configPath = Join-Path $runtime 'Emby.Theater.exe.config'
 [xml]$config = [IO.File]::ReadAllText($configPath)
 $config.configuration.appSettings.add | Where-Object { $_.key -eq 'ProgramDataPath' } | ForEach-Object { $_.SetAttribute('value', [string]$testProfile) }
 $config.Save($configPath)
-$process = Start-Process -FilePath (Join-Path $runtime 'Emby.Theater.exe') -WorkingDirectory $runtime -WindowStyle Hidden -PassThru
+$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+$startInfo.FileName = Join-Path $runtime 'Emby.Theater.exe'
+$startInfo.WorkingDirectory = $runtime
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+$startInfo.EnvironmentVariables['APPDATA'] = $testProfile
+$startInfo.EnvironmentVariables['LOCALAPPDATA'] = $testProfile
+$process = [System.Diagnostics.Process]::Start($startInfo)
 try {
     Start-Sleep -Seconds 10
     $children = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($runtime + '\', [StringComparison]::OrdinalIgnoreCase) })
-    $logPath = Join-Path $testProfile 'data/electron/enhanced-diagnostics.jsonl'
+$logPath = Join-Path $testProfile 'EmbyTheaterEnhanced/logs/ete-client.jsonl'
     $result = [ordered]@{ hostAlive=(-not $process.HasExited); electronProcesses=@($children | Where-Object { $_.Name -eq 'electron.exe' }).Count; diagnosticLog=(Test-Path -LiteralPath $logPath) }
     $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'host-smoke.json') -Encoding UTF8
     $result | ConvertTo-Json

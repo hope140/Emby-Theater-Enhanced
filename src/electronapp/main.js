@@ -9,6 +9,7 @@
     var path = require('path');
     var appBootstrap = require('./enhanced/bootstrap');
     var deviceIdentity = require('./device-identity');
+    var enhancedDiagnostics = require('./enhanced/diagnostics');
 
     var appBootstrapState = appBootstrap.bootstrap({
         appDataPath: app.getPath('appData'),
@@ -17,6 +18,53 @@
     var persistentDeviceId = deviceIdentity.getOrCreateDeviceId(
         path.join(appBootstrapState.configDirectory, 'device-identity.json')
     );
+
+    var enhancedLog = enhancedDiagnostics.createLogger(appBootstrapState.profileRoot);
+    function getBuildCommit() {
+        var fs = require('fs');
+        var candidates = [
+            path.join(__dirname, '..', 'runtime-provenance.json'),
+            path.join(__dirname, '..', '..', 'runtime-provenance.json'),
+            path.join(__dirname, 'runtime-provenance.json')
+        ];
+        for (var index = 0; index < candidates.length; index++) {
+            try {
+                var manifest = JSON.parse(fs.readFileSync(candidates[index], 'utf8'));
+                if (manifest && /^[0-9a-f]{40}$/i.test(String(manifest.sourceCommit || ''))) return String(manifest.sourceCommit).toLowerCase();
+            } catch (_) { }
+        }
+        return 'UNKNOWN';
+    }
+    function getAppVersion() {
+        try { return app.getVersion(); } catch (_) { return 'UNKNOWN'; }
+    }
+    var diagnosticsAppInfo = {
+        appVersion: getAppVersion(),
+        buildCommit: getBuildCommit(),
+        platform: process.platform,
+        arch: process.arch,
+        electron: process.versions.electron,
+        chromium: process.versions.chrome,
+        node: process.versions.node,
+        deviceIdHash: enhancedDiagnostics.hashIdentifier(persistentDeviceId)
+    };
+    var mpvConfigEvidence = enhancedDiagnostics.configEvidence({
+        appData: process.env.APPDATA,
+        knownFolder: app.getPath('appData'),
+        executableDir: path.dirname(process.execPath),
+        mpvHome: process.env.MPV_HOME
+    });
+    enhancedLog({category: 'app', event: 'start', details: {
+        appVersion: diagnosticsAppInfo.appVersion,
+        buildCommit: diagnosticsAppInfo.buildCommit,
+        platform: diagnosticsAppInfo.platform,
+        arch: diagnosticsAppInfo.arch,
+        electron: diagnosticsAppInfo.electron,
+        chromium: diagnosticsAppInfo.chromium,
+        node: diagnosticsAppInfo.node,
+        deviceIdHash: diagnosticsAppInfo.deviceIdHash,
+        mpvConfig: mpvConfigEvidence
+    }});
 
     // Keep a global reference of the window object, if you don't, the window will
     // be closed automatically when the JavaScript object is garbage collected.
@@ -52,6 +100,7 @@
     var strmConfigStore;
     var unregisterCd2Ipc = function () {};
     var unregisterStrmConfigIpc = function () {};
+    var unregisterDiagnosticsIpc = function () {};
 
     function onWindowMoved() {
 
@@ -879,7 +928,7 @@
         rootDir: require('path').join(app.getPath('userData'), 'config'),
         environment: Object.assign({}, process.env)
     });
-    cd2Service = cd2ServiceModule.createService({config: strmConfigStore.getRuntimeConfig()});
+    cd2Service = cd2ServiceModule.createService({config: strmConfigStore.getRuntimeConfig(), onDiagnostic: enhancedLog});
     unregisterCd2Ipc = require('./enhanced/cd2-ipc').register({
         ipcMain: ipcMain,
         service: cd2Service,
@@ -894,29 +943,28 @@
             return cd2ServiceModule.createService({config: strmConfigStore.getRuntimeConfig()});
         }
     });
+    unregisterDiagnosticsIpc = require('./enhanced/diagnostics-ipc').register({
+        ipcMain: ipcMain,
+        logger: enhancedLog,
+        getWebContents: getWebContents,
+        getBrowserWindow: function () { return mainWindow; },
+        getAppInfo: function () { return Object.assign({}, diagnosticsAppInfo); },
+        app: app,
+        dialog: electron.dialog,
+        shell: electron.shell
+    });
     ['ETE_CD2_ENABLED', 'ETE_CD2_ORIGIN', 'ETE_CD2_TOKEN', 'ETE_CD2_LOCAL_PREFIX', 'ETE_CD2_CLOUD_PREFIX', 'ETE_CD2_DIRECT_URL', 'ETE_CD2_SOURCE_PREFIX', 'ETE_CD2_MOUNT_PREFIX'].forEach(function (name) {
         delete process.env[name];
     });
     app.once('before-quit', function () {
+        enhancedLog({category: 'app', event: 'shutdown', details: {reason: 'before-quit'}});
+        unregisterDiagnosticsIpc();
         unregisterStrmConfigIpc();
         unregisterCd2Ipc();
     });
-
-    var enhancedDiagnostics = require('./enhanced/diagnostics');
-    var enhancedLog = enhancedDiagnostics.createLogger(app.getPath('userData'));
-    enhancedLog({ stage: 'runtime', versions: {
-        electron: process.versions.electron,
-        chromium: process.versions.chrome,
-        node: process.versions.node
-    }, mpvConfig: enhancedDiagnostics.configEvidence({
-        appData: process.env.APPDATA,
-        knownFolder: app.getPath('appData'),
-        executableDir: require('path').dirname(process.execPath),
-        mpvHome: process.env.MPV_HOME
-    }) });
     ipcMain.on('enhanced-diagnostics', function (event, snapshot) {
         if (event.sender === getWebContents()) {
-            enhancedLog(enhancedDiagnostics.sanitize(snapshot));
+            enhancedLog({category: 'mpv', event: 'snapshot', details: enhancedDiagnostics.sanitize(snapshot)});
         }
     });
 

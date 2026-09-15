@@ -11,6 +11,11 @@
 }(this, function (pathRules, defaultFileSystem) {
     'use strict';
 
+    var nodeCrypto = null;
+    try {
+        if (typeof module === 'object' && module.exports && typeof require === 'function') nodeCrypto = require('crypto');
+    } catch (_) { }
+
     var mediaExtensions = {
         mkv: true,
         mp4: true,
@@ -216,6 +221,31 @@
         }
     }
 
+    function pathHash(value, dependencies) {
+        var normalized;
+        var hash;
+        try {
+            if (dependencies && typeof dependencies.pathHash === 'function') {
+                hash = dependencies.pathHash(value);
+                if (typeof hash === 'string' && hash) return hash.slice(0, 16);
+            }
+            if (!nodeCrypto) return null;
+            normalized = String(value == null ? '' : value).trim().replace(/\u0000/g, '').replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+            if (/^(?:[a-z]:|\/)/i.test(normalized)) normalized = normalized.toLowerCase();
+            return nodeCrypto.createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 16);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function emitDiagnostic(dependencies, event, details) {
+        try {
+            if (!dependencies || typeof dependencies.onDiagnostic !== 'function') return;
+            var pending = dependencies.onDiagnostic({level: event === 'resolve-hit' ? 'info' : 'warn', category: 'mount', event: event, details: details || {}});
+            if (pending && typeof pending.catch === 'function') pending.catch(function () {});
+        } catch (_) { /* Observability is fail-open. */ }
+    }
+
     function makeResult(type, source, reason, localExists) {
         return {
             type: type,
@@ -316,6 +346,18 @@
         var nativeSource = context && context.nativeSource;
         var fileSystem = getFileSystem(dependencies);
         var rule = dependencies && dependencies.rule;
+        var candidateCount = 0;
+        var initialCandidates;
+        var result;
+        try {
+            initialCandidates = getCandidates(context, dependencies);
+            candidateCount = initialCandidates.length;
+        } catch (_) { }
+        emitDiagnostic(dependencies, 'resolve-start', {
+            requestId: dependencies && dependencies.requestId,
+            ruleId: rule && rule.id,
+            candidateCount: candidateCount
+        });
         var visited = visitCandidates(context, dependencies, function (candidate) {
             var mapped = rule
                 ? pathRules.replacePrefix(candidate, rule.sourcePrefix, rule.mountPrefix)
@@ -332,12 +374,30 @@
                 : null;
         });
 
-        if (rule && (!rule.mountPrefix || rule.enabled === false || rule.originState === 'DISABLED')) {
-            return makeResult('native', nativeSource, 'mount_not_configured', false);
+        function finish(value) {
+            var event = value && value.type === 'local' && value.reason === 'mount_hit' ? 'resolve-hit' : 'resolve-miss';
+            var details = {
+                requestId: dependencies && dependencies.requestId,
+                ruleId: rule && rule.id,
+                candidateCount: candidateCount,
+                reason: value && value.reason || 'unknown',
+                localExists: value && value.localExists === true
+            };
+            if (event === 'resolve-hit') {
+                var hash = pathHash(value.source, dependencies);
+                if (hash) details.mappedPathHash = hash;
+            }
+            emitDiagnostic(dependencies, event, details);
+            return value;
         }
-        if (visited.result) return visited.result;
-        if (visited.failed) return makeResult('native', nativeSource, 'parse_failed', false);
-        return makeResult('native', nativeSource, 'mount_missing', false);
+
+        if (rule && (!rule.mountPrefix || rule.enabled === false || rule.originState === 'DISABLED')) {
+            result = makeResult('native', nativeSource, 'mount_not_configured', false);
+            return finish(result);
+        }
+        if (visited.result) return finish(visited.result);
+        if (visited.failed) return finish(makeResult('native', nativeSource, 'parse_failed', false));
+        return finish(makeResult('native', nativeSource, 'mount_missing', false));
     }
 
     return {

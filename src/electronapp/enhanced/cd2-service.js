@@ -300,10 +300,54 @@ function createService(options) {
     const setTimer = settings.setTimeout || setTimeout;
     const clearTimer = settings.clearTimeout || clearTimeout;
     const transportFactory = settings.transportFactory || createGrpcTransport;
+    const onDiagnostic = typeof settings.onDiagnostic === 'function' ? settings.onDiagnostic : function () {};
     const active = new Map();
     const modeSessions = new Map();
     let transport;
     let transportError;
+
+    function emitDiagnostic(level, event, details) {
+        try {
+            const pending = onDiagnostic({level: level, category: 'cd2', event: event, details: details || {}});
+            if (pending && typeof pending.catch === 'function') pending.catch(function () {});
+        } catch (_) { /* Observability is fail-open. */ }
+    }
+
+    function startDiagnostic(request, mode) {
+        const candidates = request && Array.isArray(request.candidates) ? request.candidates : [];
+        const startedAt = now();
+        emitDiagnostic('info', 'resolve-start', {
+            requestId: request && request.requestId,
+            ruleId: request && request.ruleId,
+            mode: mode || (request && request.mode) || 'legacy',
+            candidateCount: candidates.length
+        });
+        return startedAt;
+    }
+
+    function finishDiagnostic(request, mode, startedAt, response) {
+        const status = response && response.status;
+        const reason = response && response.reason;
+        const event = status === 'hit'
+            ? 'resolve-hit'
+            : status === 'cancelled' || reason === 'cancelled'
+                ? 'resolve-cancelled'
+                : ['client_unavailable', 'proto_integrity', 'transport_error', 'rpc_error'].includes(reason)
+                    ? 'resolve-error'
+                    : 'resolve-miss';
+        const details = {
+            requestId: request && request.requestId,
+            ruleId: request && request.ruleId,
+            mode: mode || (request && request.mode) || 'legacy',
+            candidateCount: request && Array.isArray(request.candidates) ? request.candidates.length : 0,
+            reason: reason || 'unknown',
+            elapsedMs: Math.max(0, now() - startedAt),
+            timeout: reason === 'timeout',
+            cancelled: event === 'resolve-cancelled'
+        };
+        if (response && response.sourceKind) details.sourceKind = response.sourceKind;
+        emitDiagnostic(event === 'resolve-hit' ? 'info' : 'warn', event, details);
+    }
 
     function getTransport() {
         if (transportError) throw transportError;
@@ -438,7 +482,7 @@ function createService(options) {
         return startedAt + config.totalBudgetMs;
     }
 
-    async function resolveMode(request) {
+    async function resolveModeInternal(request) {
         const requestId = request && request.requestId;
         const candidates = request && request.candidates;
         const mode = request && request.mode;
@@ -599,9 +643,7 @@ function createService(options) {
         }
     }
 
-    async function resolve(request) {
-        if (request && request.mode) return resolveMode(request);
-
+    async function resolveLegacyInternal(request) {
         const requestId = request && request.requestId;
         const candidates = request && request.candidates;
         let cloudPath;
@@ -725,6 +767,31 @@ function createService(options) {
             return result('miss', error && error.message === 'proto_integrity' ? 'proto_integrity' : 'client_unavailable');
         } finally {
             if (active.get(requestId) === entry) active.delete(requestId);
+        }
+    }
+
+    async function resolveMode(request) {
+        const startedAt = startDiagnostic(request, request && request.mode);
+        try {
+            const response = await resolveModeInternal(request);
+            finishDiagnostic(request, request && request.mode, startedAt, response);
+            return response;
+        } catch (error) {
+            finishDiagnostic(request, request && request.mode, startedAt, {status: 'miss', reason: error && error.message || 'resolve_error'});
+            throw error;
+        }
+    }
+
+    async function resolve(request) {
+        if (request && request.mode) return resolveMode(request);
+        const startedAt = startDiagnostic(request, 'legacy');
+        try {
+            const response = await resolveLegacyInternal(request);
+            finishDiagnostic(request, 'legacy', startedAt, response);
+            return response;
+        } catch (error) {
+            finishDiagnostic(request, 'legacy', startedAt, {status: 'miss', reason: error && error.message || 'resolve_error'});
+            throw error;
         }
     }
 
