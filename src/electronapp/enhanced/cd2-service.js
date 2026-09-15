@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const pathRules = require('../resolvers/path-rules');
 
 const DEFAULT_TOTAL_BUDGET_MS = 750;
 const CONNECT_BUDGET_MS = 200;
@@ -58,69 +59,30 @@ function parseOrigin(value) {
     };
 }
 
-function splitLocalPath(value) {
-    let source = String(value || '').trim().replace(/\//g, '\\');
-    let root;
-    let rest;
-
-    if (/^[A-Za-z]:$/.test(source)) source += '\\';
-    if (/^[A-Za-z]:\\/.test(source)) {
-        root = source.slice(0, 3);
-        rest = source.slice(3);
-    } else {
-        const match = /^\\\\([^\\]+)\\([^\\]+)(?:\\|$)/.exec(source);
-        if (!match) return null;
-        root = '\\\\' + match[1] + '\\' + match[2] + '\\';
-        rest = source.slice(match[0].length);
-    }
-
-    const parts = rest.split(/\\+/).filter(Boolean);
-    if (parts.some(function (part) { return part === '.' || part === '..'; })) return null;
-    return {root: root, parts: parts};
-}
-
 function normalizeLocalPath(value) {
-    const parsed = splitLocalPath(value);
-    if (!parsed) return null;
-    return parsed.root + parsed.parts.join('\\');
+    return pathRules.normalizeWindows(value);
 }
 
 function normalizeMappingPrefix(value) {
-    const source = String(value || '').trim();
-    if (!source) return null;
-    if (!source.startsWith('/')) return normalizeLocalPath(source);
-    const parts = source.replace(/\\/g, '/').split(/\/+/).filter(Boolean);
-    if (parts.some(function (part) { return part === '.' || part === '..'; })) return null;
-    return '/' + parts.join('/');
+    return pathRules.normalizeMappingPrefix(value);
 }
 
 function normalizeCloudPath(value) {
-    const source = String(value || '').trim().replace(/\\/g, '/');
-    if (!source) return null;
-    const parts = source.split(/\/+/).filter(Boolean);
-    if (parts.some(function (part) { return part === '.' || part === '..'; })) return null;
-    return '/' + parts.join('/');
+    return pathRules.normalizeCloudPrefix(value);
 }
 
 function mapLocalPath(localPath, localPrefix, cloudPrefix) {
-    const prefix = normalizeMappingPrefix(localPrefix);
-    const cloud = normalizeCloudPath(cloudPrefix);
-    const isPosix = prefix && prefix.startsWith('/');
-    const local = isPosix ? normalizeMappingPrefix(localPath) : normalizeLocalPath(localPath);
-    let suffix;
+    return pathRules.replacePrefix(localPath, localPrefix, cloudPrefix);
+}
 
-    if (!local || !prefix || !cloud) return null;
-    if (isPosix) {
-        if (local !== prefix && !local.startsWith(prefix.replace(/\/$/, '') + '/')) return null;
-        suffix = local.slice(prefix.replace(/\/$/, '').length).replace(/^\/+/, '');
-    } else {
-        if (local.toLowerCase() !== prefix.toLowerCase() &&
-            !local.toLowerCase().startsWith(prefix.replace(/\\$/, '').toLowerCase() + '\\')) {
-            return null;
-        }
-        suffix = local.slice(prefix.replace(/\\$/, '').length).replace(/^\\+/, '');
-    }
-    return normalizeCloudPath(cloud + (suffix ? '/' + suffix.replace(/\\/g, '/') : ''));
+function normalizeProvidedConfig(input) {
+    const config = Object.assign({directUrlEnabled: true, totalBudgetMs: DEFAULT_TOTAL_BUDGET_MS}, input || {});
+    if (config.origin && typeof config.origin === 'string') config.origin = parseOrigin(config.origin);
+    if (!config.enabled) config.error = 'disabled';
+    else if (!config.origin) config.error = 'invalid_origin';
+    else if (!config.token) config.error = 'missing_token';
+    else if (!Array.isArray(config.rules) && (!config.localPrefix || !config.cloudPrefix)) config.error = 'missing_mapping';
+    return config;
 }
 
 function readConfig(environment) {
@@ -330,7 +292,7 @@ function sameOriginSource(response, origin) {
 function createService(options) {
     const settings = options || {};
     const config = settings.config
-        ? Object.assign({directUrlEnabled: true}, settings.config)
+        ? normalizeProvidedConfig(settings.config)
         : readConfig(settings.environment || process.env);
     const sameOriginReserveMs = Math.min(SAME_ORIGIN_RESERVE_MS,
         Math.max(1, Math.floor(config.totalBudgetMs / 3)));
@@ -339,6 +301,7 @@ function createService(options) {
     const clearTimer = settings.clearTimeout || clearTimeout;
     const transportFactory = settings.transportFactory || createGrpcTransport;
     const active = new Map();
+    const modeSessions = new Map();
     let transport;
     let transportError;
 
@@ -350,6 +313,11 @@ function createService(options) {
 
     function cancel(requestId) {
         const entry = active.get(requestId);
+        const session = modeSessions.get(requestId);
+        if (session) {
+            clearTimer(session.timer);
+            modeSessions.delete(requestId);
+        }
         if (!entry) return false;
         entry.cancelled = true;
         if (entry.cancelCurrent) entry.cancelCurrent();
@@ -434,7 +402,206 @@ function createService(options) {
         });
     }
 
+    function clearModeSession(requestId) {
+        const session = modeSessions.get(requestId);
+        if (!session) return;
+        clearTimer(session.timer);
+        modeSessions.delete(requestId);
+    }
+
+    function rememberModeSession(requestId, value) {
+        clearModeSession(requestId);
+        const session = Object.assign({}, value);
+        session.timer = setTimer(function () {
+            if (modeSessions.get(requestId) === session) modeSessions.delete(requestId);
+        }, Math.max(1000, config.totalBudgetMs + 1000));
+        modeSessions.set(requestId, session);
+    }
+
+    function modeMapping(request) {
+        if (Array.isArray(config.rules)) {
+            const rule = config.rules.find(function (value) {
+                return value && value.id === request.ruleId && value.enabled !== false && value.originState !== 'DISABLED';
+            });
+            if (!rule || !rule.sourcePrefix || !rule.cloudPrefix) return null;
+            return {localPrefix: rule.sourcePrefix, cloudPrefix: rule.cloudPrefix};
+        }
+        if (!config.localPrefix || !config.cloudPrefix) return null;
+        return {localPrefix: config.localPrefix, cloudPrefix: config.cloudPrefix};
+    }
+
+    function modeDeadline(request, startedAt) {
+        const requested = Number(request && request.deadlineAt);
+        if (Number.isSafeInteger(requested) && requested > 0) {
+            return Math.min(startedAt + config.totalBudgetMs, requested);
+        }
+        return startedAt + config.totalBudgetMs;
+    }
+
+    async function resolveMode(request) {
+        const requestId = request && request.requestId;
+        const candidates = request && request.candidates;
+        const mode = request && request.mode;
+        const startedAt = now();
+        const overallDeadline = modeDeadline(request, startedAt);
+        const mapping = modeMapping(request || {});
+        let cloudPath;
+        let entry;
+        let session;
+        let fileResponse;
+        let directResponse;
+        let reply;
+        let acquiredAt;
+        let deadline;
+        let source;
+        let directResult;
+        let directReason;
+
+        if (config.error) return result('miss', config.error);
+        if (mode !== 'direct' && mode !== 'same-origin') return result('miss', 'invalid_mode');
+        if (typeof requestId !== 'string' || !REQUEST_ID_PATTERN.test(requestId)) return result('miss', 'invalid_request');
+        if (!Array.isArray(candidates) || candidates.length < 1 || candidates.length > 4) return result('miss', 'invalid_candidates');
+        if (!mapping) return result('miss', 'mapping_miss');
+
+        for (const candidate of candidates) {
+            if (typeof candidate !== 'string' || candidate.length > 32768) return result('miss', 'invalid_candidates');
+            cloudPath = mapLocalPath(candidate, mapping.localPrefix, mapping.cloudPrefix);
+            if (cloudPath) break;
+        }
+        if (!cloudPath) return result('miss', 'mapping_miss');
+
+        if (mode === 'direct' && !config.directUrlEnabled) return result('miss', 'direct_url_disabled');
+        session = modeSessions.get(requestId);
+        if (session && (session.cloudPath !== cloudPath || now() >= overallDeadline)) {
+            clearModeSession(requestId);
+            session = null;
+        }
+        if (session) {
+            fileResponse = session.fileResponse;
+            directResponse = session.directResponse;
+        }
+
+        entry = {cancelled: false, call: null, cancelCurrent: null};
+        active.set(requestId, entry);
+
+        try {
+            if (!fileResponse) {
+                reply = await waitForReady(entry, Math.min(overallDeadline, startedAt + CONNECT_BUDGET_MS));
+                if (entry.cancelled) return result('cancelled', 'cancelled');
+                if (reply.error) return result('miss', reply.error.localReason);
+
+                reply = await unary(entry, 'FindFileByPath', {parentPath: '', path: cloudPath},
+                    Math.min(overallDeadline, startedAt + FIND_BUDGET_MS));
+                if (entry.cancelled) return result('cancelled', 'cancelled');
+                if (reply.error) return result('miss', classifyError(reply.error, getTransport().status));
+                if (!isRegularFile(reply.response)) return result('miss', 'invalid_file');
+                fileResponse = reply.response;
+            }
+
+            if (mode === 'same-origin') {
+                source = sameOriginSource(directResponse, config.origin);
+                if (source) {
+                    clearModeSession(requestId);
+                    return result('hit', 'cd2_hit', source, {
+                        sourceKind: 'cd2-url',
+                        directReason: session && session.directReason || 'direct_url_unavailable'
+                    });
+                }
+            }
+
+            acquiredAt = now();
+            deadline = Math.min(
+                overallDeadline - (mode === 'direct' ? sameOriginReserveMs : 0),
+                acquiredAt + (mode === 'direct' ? DIRECT_DOWNLOAD_BUDGET_MS : DOWNLOAD_BUDGET_MS)
+            );
+            reply = await unary(entry, 'GetDownloadUrlPath', {
+                path: cloudPath,
+                preview: false,
+                lazy_read: false,
+                get_direct_url: mode === 'direct'
+            }, deadline);
+            if (entry.cancelled) return result('cancelled', 'cancelled');
+            if (reply.error) {
+                if (mode === 'direct') {
+                    rememberModeSession(requestId, {
+                        cloudPath: cloudPath,
+                        fileResponse: fileResponse,
+                        directResponse: directResponse,
+                        directReason: classifyError(reply.error, getTransport().status)
+                    });
+                } else {
+                    clearModeSession(requestId);
+                }
+                return result('miss', classifyError(reply.error, getTransport().status));
+            }
+
+            if (mode === 'same-origin') {
+                if (!reply.response || reply.response.directUrl || reply.response.externalUrl) {
+                    clearModeSession(requestId);
+                    return result('miss', 'unsupported_response');
+                }
+                source = sameOriginSource(reply.response, config.origin);
+                clearModeSession(requestId);
+                return source
+                    ? result('hit', 'cd2_hit', source, {sourceKind: 'cd2-url'})
+                    : result('miss', 'invalid_download_url');
+            }
+
+            directResponse = reply.response;
+            directResult = validateDirectResponse(directResponse, acquiredAt, now());
+            if (directResult.valid) {
+                clearModeSession(requestId);
+                const details = {sourceKind: 'direct-url', acquiredAt: directResult.acquiredAt};
+                if (directResult.requestOptions) details.requestOptions = directResult.requestOptions;
+                if (directResult.expiresAt !== undefined) details.expiresAt = directResult.expiresAt;
+                return result('hit', 'direct_url_hit', directResult.source, details);
+            }
+
+            directReason = directResult.reason;
+            if (directResult.reacquire && now() < overallDeadline) {
+                acquiredAt = now();
+                deadline = Math.min(overallDeadline - sameOriginReserveMs, acquiredAt + DIRECT_DOWNLOAD_BUDGET_MS);
+                reply = await unary(entry, 'GetDownloadUrlPath', {
+                    path: cloudPath,
+                    preview: false,
+                    lazy_read: false,
+                    get_direct_url: true
+                }, deadline);
+                if (entry.cancelled) return result('cancelled', 'cancelled');
+                if (!reply.error) {
+                    directResponse = reply.response;
+                    directResult = validateDirectResponse(directResponse, acquiredAt, now());
+                    if (directResult.valid) {
+                        clearModeSession(requestId);
+                        const details = {sourceKind: 'direct-url', acquiredAt: directResult.acquiredAt};
+                        if (directResult.requestOptions) details.requestOptions = directResult.requestOptions;
+                        if (directResult.expiresAt !== undefined) details.expiresAt = directResult.expiresAt;
+                        return result('hit', 'direct_url_hit', directResult.source, details);
+                    }
+                    directReason = directResult.reason;
+                } else {
+                    directReason = classifyError(reply.error, getTransport().status);
+                }
+            }
+
+            rememberModeSession(requestId, {
+                cloudPath: cloudPath,
+                fileResponse: fileResponse,
+                directResponse: directResponse,
+                directReason: directReason
+            });
+            return result('miss', directReason);
+        } catch (error) {
+            clearModeSession(requestId);
+            return result('miss', error && error.message === 'proto_integrity' ? 'proto_integrity' : 'client_unavailable');
+        } finally {
+            if (active.get(requestId) === entry) active.delete(requestId);
+        }
+    }
+
     async function resolve(request) {
+        if (request && request.mode) return resolveMode(request);
+
         const requestId = request && request.requestId;
         const candidates = request && request.candidates;
         let cloudPath;
@@ -561,9 +728,63 @@ function createService(options) {
         }
     }
 
+    async function testConnection() {
+        const reason = config.error;
+        if (reason === 'disabled' || reason === 'missing_token' || reason === 'invalid_origin' || reason === 'missing_mapping') {
+            return {status: 'incomplete', reason: reason};
+        }
+
+        const deadline = now() + 1500;
+        try {
+            const currentTransport = getTransport();
+            const reply = await new Promise(function (resolve) {
+                let settled = false;
+                const timer = setTimer(function () {
+                    if (settled) return;
+                    settled = true;
+                    resolve({error: {localReason: 'timeout'}});
+                }, Math.max(1, deadline - now()));
+                try {
+                    currentTransport.client.waitForReady(new Date(deadline), function (error) {
+                        if (settled) return;
+                        settled = true;
+                        clearTimer(timer);
+                        resolve({error: error || null});
+                    });
+                } catch (error) {
+                    if (settled) return;
+                    settled = true;
+                    clearTimer(timer);
+                    resolve({error: error});
+                }
+            });
+            if (!reply.error) {
+                const probeEntry = {cancelled: false, call: null, cancelCurrent: null};
+                const probe = await unary(probeEntry, 'FindFileByPath', {parentPath: '', path: '/'}, now() + 500);
+                if (!probe.error) return {status: 'ok', reason: 'connected'};
+                if (currentTransport.status && (probe.error.code === currentTransport.status.UNAUTHENTICATED ||
+                    probe.error.code === currentTransport.status.PERMISSION_DENIED)) {
+                    return {status: 'auth_failed', reason: 'auth_failed'};
+                }
+                if (currentTransport.status && probe.error.code === currentTransport.status.NOT_FOUND) {
+                    return {status: 'ok', reason: 'connected'};
+                }
+                return {status: 'connection_failed', reason: 'connection_failed'};
+            }
+            if (currentTransport.status && (reply.error.code === currentTransport.status.UNAUTHENTICATED ||
+                reply.error.code === currentTransport.status.PERMISSION_DENIED)) {
+                return {status: 'auth_failed', reason: 'auth_failed'};
+            }
+            return {status: 'connection_failed', reason: 'connection_failed'};
+        } catch (_) {
+            return {status: 'connection_failed', reason: 'connection_failed'};
+        }
+    }
+
     function close() {
         for (const requestId of active.keys()) cancel(requestId);
         active.clear();
+        Array.from(modeSessions.keys()).forEach(clearModeSession);
         if (transport && transport.client && typeof transport.client.close === 'function') transport.client.close();
     }
 
@@ -579,6 +800,7 @@ function createService(options) {
         resolve: resolve,
         cancel: cancel,
         close: close,
+        testConnection: testConnection,
         configState: function () { return config.error || 'ready'; }
     };
 }

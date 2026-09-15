@@ -37,18 +37,10 @@
         return null;
     }
 
-    var cd2Service = require('./enhanced/cd2-service').createService({environment: process.env});
-    ['ETE_CD2_ENABLED', 'ETE_CD2_ORIGIN', 'ETE_CD2_TOKEN', 'ETE_CD2_LOCAL_PREFIX', 'ETE_CD2_CLOUD_PREFIX', 'ETE_CD2_DIRECT_URL'].forEach(function (name) {
-        delete process.env[name];
-    });
-    var unregisterCd2Ipc = require('./enhanced/cd2-ipc').register({
-        ipcMain: ipcMain,
-        service: cd2Service,
-        getWebContents: getWebContents
-    });
-    app.once('before-quit', function () {
-        unregisterCd2Ipc();
-    });
+    var cd2Service;
+    var strmConfigStore;
+    var unregisterCd2Ipc = function () {};
+    var unregisterStrmConfigIpc = function () {};
 
     function onWindowMoved() {
 
@@ -869,6 +861,35 @@
     if (userDataPath) {
         app.setPath('userData', userDataPath);
     }
+
+    var strmConfigStoreModule = require('./enhanced/strm-config-store');
+    var cd2ServiceModule = require('./enhanced/cd2-service');
+    strmConfigStore = strmConfigStoreModule.createStore({
+        rootDir: require('path').join(app.getPath('userData'), 'config'),
+        environment: Object.assign({}, process.env)
+    });
+    cd2Service = cd2ServiceModule.createService({config: strmConfigStore.getRuntimeConfig()});
+    unregisterCd2Ipc = require('./enhanced/cd2-ipc').register({
+        ipcMain: ipcMain,
+        service: cd2Service,
+        getWebContents: getWebContents
+    });
+    unregisterStrmConfigIpc = require('./enhanced/strm-config-ipc').register({
+        ipcMain: ipcMain,
+        store: strmConfigStore,
+        service: cd2Service,
+        getWebContents: getWebContents,
+        createTestService: function () {
+            return cd2ServiceModule.createService({config: strmConfigStore.getRuntimeConfig()});
+        }
+    });
+    ['ETE_CD2_ENABLED', 'ETE_CD2_ORIGIN', 'ETE_CD2_TOKEN', 'ETE_CD2_LOCAL_PREFIX', 'ETE_CD2_CLOUD_PREFIX', 'ETE_CD2_DIRECT_URL', 'ETE_CD2_SOURCE_PREFIX', 'ETE_CD2_MOUNT_PREFIX'].forEach(function (name) {
+        delete process.env[name];
+    });
+    app.once('before-quit', function () {
+        unregisterStrmConfigIpc();
+        unregisterCd2Ipc();
+    });
 
     var enhancedDiagnostics = require('./enhanced/diagnostics');
     var enhancedLog = enhancedDiagnostics.createLogger(app.getPath('userData'));

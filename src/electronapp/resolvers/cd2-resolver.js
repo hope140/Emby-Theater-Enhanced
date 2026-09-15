@@ -87,7 +87,16 @@
         if (signal) signal.addEventListener('abort', abortListener, {once: true});
 
         try {
-            response = await transport.resolve({requestId: requestId, candidates: candidates.slice(0, 4)});
+            var request = {
+                requestId: requestId,
+                candidates: candidates.slice(0, 4)
+            };
+            if (dependencies && dependencies.ruleId) request.ruleId = dependencies.ruleId;
+            if (dependencies && dependencies.mode) request.mode = dependencies.mode;
+            if (dependencies && Number.isSafeInteger(dependencies.deadlineAt)) {
+                request.deadlineAt = dependencies.deadlineAt;
+            }
+            response = await transport.resolve(request);
             if (signal && signal.aborted) throw abortError();
             if (response && response.status === 'cancelled') throw abortError();
             if (response && response.status === 'hit' && response.type === 'url' &&
