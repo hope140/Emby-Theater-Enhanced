@@ -1,12 +1,14 @@
 # 项目状态
 
-## 2026-09-15 — Direct app launch Daily-use Candidate 修复（待手工验收）
+## 2026-09-15 — Direct app launch Daily-use Candidate 修复（REAL PASS — direct app launch）
 
 原 `4761a2440e9ab1df0b3c6d01765f26f9560d9bea` 候选记录为 `NON-BLOCKING FAIL — launcher UX`，原因是 `PowerShell wrapper caused visible console flash and startup delay`。本分支 `fix/direct-app-launch` 将正式入口改为直接启动 `Emby.Theater.exe`，并把原 `Start-Enhanced` 的目录创建与缺失文件 seed 迁入 Electron main-process bootstrap；保留 `ProgramDataPath` 和用户已有配置语义，不修改 PlaybackManager、STRM resolver、CD2、Mount、libmpv、Session、WebSocket 或播放策略。
 
 安装器的开始菜单、桌面快捷方式和安装完成 Launch 均直接指向 `{app}\Emby.Theater.exe`；`tools/build.ps1` 不再复制 `Start-Enhanced.ps1/.cmd`，source tool 文件暂保留。候选 runtime 固定为 `dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch`，installer 固定为 `dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch-setup.exe`；最终 artifact 已绑定本分支最终 HEAD，provenance、package verify、Inno archive integrity 和逐文件 payload comparison 均通过。
 
-当前自动验证：bootstrap/installer targeted 3/3，相关 targeted 合并检查 5/5，`npm test` 101/101，JavaScript syntax 68/68，PowerShell syntax 11/11，`git diff --check` 通过；最终 HEAD 的 source build、provenance、package verify、archive integrity、payload comparison 和 packaged bootstrap 隔离检查均通过。新候选尚未进行安装后的四入口手工验收，不能标记最终 PASS；原候选失败原因保留为历史验收记录。
+当前自动验证：bootstrap/installer targeted 3/3，相关 targeted 合并检查 5/5，`npm test` 101/101，JavaScript syntax 68/68，PowerShell syntax 11/11，`git diff --check` 通过；最终 HEAD 的 source build、provenance、package verify、archive integrity、payload comparison 和 packaged bootstrap 隔离检查均通过。原候选失败原因保留为历史验收记录；本轮仅关闭 launcher UX，不改变整体 Daily-use Candidate 的最终 READY 判定。
+
+真实手工验收已完成并通过：installer post-install Launch、桌面快捷方式、开始菜单快捷方式、直接 `Emby.Theater.exe` 均为 `REAL PASS`。四入口均无 PowerShell/CMD 窗口闪烁，启动体验正常，既有 Emby 登录状态保留。本轮只关闭 launcher UX 问题；Daily-use Candidate 整体仍未达到最终 `READY`，其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目保持原有验收边界。
 
 ## 2026-09-15 — Daily-use Candidate prepared from latest origin/main
 

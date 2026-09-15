@@ -2,20 +2,29 @@
 
 日期：2026-09-15（UTC+8）
 
-## 当前候选：direct app launch（待手工验收）
+## 当前候选：direct app launch（REAL PASS — direct app launch）
 
 原候选 `4761a2440e9ab1df0b3c6d01765f26f9560d9bea` 的启动验收结论为 `NON-BLOCKING FAIL — launcher UX`，原因是 `PowerShell wrapper caused visible console flash and startup delay`。
 
 本分支 `fix/direct-app-launch` 将安装器开始菜单、桌面快捷方式和安装完成 Launch 统一改为直接启动 `{app}\Emby.Theater.exe`。Electron main process 负责原 launcher 的幂等初始化，正式 runtime 不再携带 `Start-Enhanced.ps1/.cmd`。
 
-新候选预留路径：
+新候选路径：
 
 - Runtime：`dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch`
 - Installer：`dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch-setup.exe`
 
 候选 artifact 已绑定本分支最终 HEAD；runtime provenance、`package.ps1 -VerifyOnly`、Inno archive integrity 和 `{app}` payload comparison 均通过。artifact 数量、大小和 SHA256 以最终交付记录为准。
 
-当前自动验证已覆盖 bootstrap seed/preserve、installer direct-entry、provenance scope、runtime bootstrap 和完整 Node 测试；新候选尚未完成安装后的四入口手工验收。最终状态保持 `PENDING MANUAL`，手工确认桌面、开始菜单、安装完成 Launch 与直接 exe 均通过后，才能标记最终 PASS。
+真实手工验收（2026-09-15，UTC+8）：
+
+- Installer post-install Launch：`REAL PASS`
+- Desktop shortcut：`REAL PASS`
+- Start Menu shortcut：`REAL PASS`
+- 直接双击 `Emby.Theater.exe`：`REAL PASS`
+
+四种入口均无 PowerShell/CMD 窗口闪烁，启动体验正常，既有 Emby 登录状态保留。因此本项结论为 `REAL PASS — direct app launch`。
+
+当前自动验证已覆盖 bootstrap seed/preserve、installer direct-entry、provenance scope、runtime bootstrap 和完整 Node 测试。Daily-use Candidate 整体仍未达到最终 `READY`：其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目继续保留原有 REAL/SYNTHETIC/NOT COVERED 边界，不因本轮 launcher 验收升级。
 
 本候选从最新 `origin/main` 构建，目标是用户手动日常使用验收。没有创建 release、tag、PR，也没有修改产品播放行为、服务器配置或用户客户端配置。
 

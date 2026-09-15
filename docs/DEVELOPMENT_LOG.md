@@ -1,5 +1,13 @@
 # 开发日志
 
+## 2026-09-15 — Direct app launch 真实安装验收收尾
+
+Model Tier：1。Reason：本轮仅记录用户完成的 Windows 真实安装后四入口手工验收并创建 PR，不修改产品代码，不重新 build/package/test/smoke。Escalated：no。
+
+原候选验收记录为 `NON-BLOCKING FAIL — launcher UX`，问题是 `PowerShell wrapper caused visible console flash and startup delay`。用户已确认新候选四种真实入口全部通过：installer post-install Launch、desktop shortcut、Start Menu shortcut、直接 `Emby.Theater.exe` 均为 `REAL PASS`；四入口均无命令窗口闪烁，启动体验正常，既有 Emby 登录状态保留。
+
+本项结论更新为 `REAL PASS — direct app launch`。Daily-use Candidate 整体不升级为最终 `READY`；其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目仍按原有 REAL/SYNTHETIC/NOT COVERED 证据记录。保留 final HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的代码、build/provenance/package/integrity 证据；hidden Electron smoke 未重跑。
+
 ## 2026-09-15 — Direct app launch Daily-use Candidate 修复
 
 Model Tier：1。Reason：范围限定为 Electron main-process bootstrap、installer direct entry、runtime copy/provenance 和启动 UX 验证，不触碰播放链或 Session 生命周期。Escalated：no。
