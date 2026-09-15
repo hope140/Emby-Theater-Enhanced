@@ -6,7 +6,7 @@
 
 新增 A/B/C regression tests，分别覆盖 source 命中优先、有效 source 无命中禁止 sidecar 接管、HTTP source 允许 sidecar fallback。未修改 PlaybackManager、Session、libmpv ownership、CD2 service 架构或配置 schema。
 
-验证：settings targeted 20/20；`npm test` 97/97；相关 JS syntax 与 `git diff --check` 通过。修复后按最终 HEAD 重建 runtime 的 provenance/package verify，并执行一次非可见 synthetic runtime pipeline；REAL settings UI 继续记录为 `NOT COVERED — native window automation unavailable`。
+验证：settings targeted 20/20；`npm test` 97/97；相关 JS syntax 与 `git diff --check` 通过；最终 HEAD 的 build、runtime provenance 和 package verify 通过。较早候选 HEAD `295626753089de9f70c2cb28b5c5954be51b3843` 的 synthetic runtime pipeline PASS 证据继续保留，包含 DirectUrl fake、CD2 HTTP fake、CD2 miss → Mount/Native fallback、PlaybackManager / Session / controls / reporting / cleanup，但不冒充最终 HEAD 验证。source identity precedence 修复后最后一次 hidden Electron synthetic runtime smoke 因 timeout 未完成，记录为 `NOT COMPLETED — hidden Electron smoke timeout`；按测试限制未重试。该 timeout 不判定产品功能失败，也不宣称最终 HEAD 已重新通过 synthetic runtime。REAL settings UI 继续记录为 `NOT COVERED — native window automation unavailable`。
 
 ## 2026-09-15 — STRM resolver settings candidate
 

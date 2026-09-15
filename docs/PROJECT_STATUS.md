@@ -6,7 +6,9 @@
 
 配置保存后立即持久化，当前 CD2 service 不做 hot reload，页面提示重启后播放链生效。legacy `ETE_CD2_*` 只在首次 bootstrap 时迁移为 AUTO；persistent USER/AUTO/DISABLED 状态优先，renderer GET 只得到 `tokenConfigured`，不得到 token、Bearer metadata、raw gRPC client 或完整 DirectUrl。
 
-静态与自动化验证：新增 settings suite 20/20；全量 `npm test` 97/97；覆盖 Windows/UNC/POSIX boundary、`..` 拒绝、source identity precedence、最长前缀、规则 ownership、strategy order、mount replacement、DirectUrl/same-origin mode、Native fallback、Abort 和 bounded authenticated connection probe。新 runtime 已通过 source build、provenance 和 package payload verify；synthetic pipeline 的 DirectUrl fake、CD2 HTTP fake、CD2 miss fallback、PlaybackManager/Session/controls/reporting/cleanup 证据保留。
+最终 HEAD `628b3c4a61b55790aaf9f2afe128cd1a7040b629` 的静态与自动化验证：settings suite 20/20；全量 `npm test` 97/97；覆盖 Windows/UNC/POSIX boundary、`..` 拒绝、source identity precedence、最长前缀、规则 ownership、strategy order、mount replacement、DirectUrl/same-origin mode、Native fallback、Abort 和 bounded authenticated connection probe。最终 HEAD 的 source build、runtime provenance 和 package payload verify 均通过。source identity precedence 修复后最后一次 hidden Electron synthetic runtime smoke 因 timeout 未完成，记录为 `NOT COMPLETED — hidden Electron smoke timeout`；按测试限制未重试。该 timeout 属于 runtime smoke 证据边界，不判定产品功能失败，也不宣称最终 HEAD 已重新通过 synthetic runtime。
+
+较早候选 HEAD `295626753089de9f70c2cb28b5c5954be51b3843` 已有 synthetic runtime pipeline PASS 证据，包含 DirectUrl fake、CD2 HTTP fake、CD2 miss → Mount/Native fallback，以及 PlaybackManager / Session / controls / reporting / cleanup。上述证据继续保留，但不冒充最终 HEAD `628b3c4...` 的重新验证结果。
 
 真实边界：当前 native-window automation surface 不可用，未继续启动播放器补齐手工点击证据，因此 `REAL SETTINGS UI: NOT COVERED — native window automation unavailable`。本分支未连接真实服务器，real cloud-first playback 与 real mount-first playback 均为 NOT COVERED；synthetic runtime/Node unit 不能替代真实验收。
 
