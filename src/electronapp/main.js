@@ -6,6 +6,9 @@
     var BrowserView = electron.BrowserView;  // Module to create native browser window.
     var powerSaveBlocker = electron.powerSaveBlocker
     var nativeImage = electron.nativeImage;
+    var productIdentity = require('./product-identity');
+    var productMetadata = require('./package.json');
+    productIdentity.setAppName(app, productMetadata);
     var path = require('path');
     var appBootstrap = require('./enhanced/bootstrap');
 

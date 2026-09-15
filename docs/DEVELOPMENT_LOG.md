@@ -1,5 +1,13 @@
 # 开发日志
 
+## 2026-09-15 — Product Session identity parity
+
+Model Tier：2。Reason：正式 Electron startup、runtime package metadata、loadStartInfo、ConnectionManager、ApiClient 与 acceptance runner 的跨层 identity parity；不改变 PlaybackManager 或服务器控制协议。Escalated：no。
+
+基于 `main@780aaed8ddc5bde42654e56e7635379f29f9e485` 创建分支 `fix/product-session-identity`。Git history 确认历史 `app.setName(metadata.productName || metadata.name)` 只存在于 acceptance runner；正式产品 `main.js` 过去只读取隐式 `app.name`。本轮新增 `src/electronapp/product-identity.js`，正式 startup 从当前 runtime 的 `electronapp/package.json` 设置 `productName || name`，并让 `tools/acceptance-electron.cjs` 复用同一 helper。
+
+测试已通过：targeted identity 3/3、全量 `npm test` 104/104、JavaScript syntax 70/70、PowerShell syntax 11/11、`git diff --check`。没有执行真实服务器或 live acceptance；后续构建只验证 runtime/provenance/package，不宣称真实 Session 或 WebSocket 通过。
+
 ## 2026-09-15 — Direct app launch 真实安装验收收尾
 
 Model Tier：1。Reason：本轮仅记录用户完成的 Windows 真实安装后四入口手工验收并创建 PR，不修改产品代码，不重新 build/package/test/smoke。Escalated：no。

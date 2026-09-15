@@ -1,5 +1,13 @@
 # 项目状态
 
+## 2026-09-15 — Product Session identity parity candidate
+
+基于 `main@780aaed8ddc5bde42654e56e7635379f29f9e485` 创建 `fix/product-session-identity`。正式 Electron startup 新增共享 `src/electronapp/product-identity.js`，从 runtime 同目录 `electronapp/package.json` 使用 `productName || name` 设置 `app.name`，位置早于 bootstrap、`loadStartInfo`、BrowserWindow 和 Web/ConnectionManager 初始化。`tools/acceptance-electron.cjs` 改为复用同一 helper，避免 acceptance 与正式产品再次分叉。
+
+本轮只修改 product application identity 和对应测试；没有修改 PlaybackManager、STRM/CD2/Mount/libmpv、Session report payload、WebSocket protocol、`Sessions/Capabilities` command list、External Player cleanup 或 installer launch 逻辑。版本继续使用 `app.getVersion()`，deviceName/deviceId 保持 `os.hostname()`。
+
+已通过 targeted identity tests 3/3、全量 `npm test` 104/104、JavaScript syntax 70/70、PowerShell syntax 11/11 和 `git diff --check`。本轮不运行真实服务器 acceptance；candidate runtime、provenance、package verify 和 installer hash 以本次最终构建回报为准。
+
 ## 2026-09-15 — Direct app launch Daily-use Candidate 修复（REAL PASS — direct app launch）
 
 原 `4761a2440e9ab1df0b3c6d01765f26f9560d9bea` 候选记录为 `NON-BLOCKING FAIL — launcher UX`，原因是 `PowerShell wrapper caused visible console flash and startup delay`。本分支 `fix/direct-app-launch` 将正式入口改为直接启动 `Emby.Theater.exe`，并把原 `Start-Enhanced` 的目录创建与缺失文件 seed 迁入 Electron main-process bootstrap；保留 `ProgramDataPath` 和用户已有配置语义，不修改 PlaybackManager、STRM resolver、CD2、Mount、libmpv、Session、WebSocket 或播放策略。

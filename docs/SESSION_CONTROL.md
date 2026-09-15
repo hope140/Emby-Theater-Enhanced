@@ -4,7 +4,7 @@
 
 ## 身份和会话
 
-`electronapp/main.js` 的 loadStartInfo 构造 app name/version、deviceName/deviceId 与插件列表，apphost 提供给 Web 层。ApiClient 使用这些身份及用户认证访问服务器；Session 由服务器识别客户端活动创建/维护，不能将客户端获取 PlaybackInfo 等同于本地自己创建服务器 Session。
+`electronapp/main.js` 的启动初始化先从 runtime 同目录 `electronapp/package.json` 读取 `productName || name`，通过共享 `product-identity.js` 设置 Electron app name，再由 loadStartInfo 构造 app name/version、deviceName/deviceId 与插件列表，apphost 提供给 Web 层。Acceptance runner 使用同一 helper。ApiClient 使用这些身份及用户认证访问服务器；Session 由服务器识别客户端活动创建/维护，不能将客户端获取 PlaybackInfo 等同于本地自己创建服务器 Session。
 
 `www/modules/emby-apiclient/apiclient.js` 的 capabilities 上报路径是 `Sessions/Capabilities`（约 1932 行）；WebSocket 携带同一客户端身份。PlaySessionId 来自 PlaybackInfo 响应，是一次播放的上下文标识，与 Session.Id 不同。
 

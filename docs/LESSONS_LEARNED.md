@@ -60,3 +60,4 @@
 58. ignored required source 不能靠开发机残留维持：如果 `src/electronapp/preload.js` 是 vendor-derived 加项目诊断的 prepared artifact，应由 tracked generator 在 prepare/build 中生成，并由 test、runtime provenance 共用同一 contract；缺失时测试必须失败而不是 skip。
 59. readiness 证据必须分层：embed raw `ready`、产品 diagnostics callback、sticky/current state、core-playing、视频 PositionTicks、Session NowPlaying 和已接受 report 各自记录；direct marker 缺失但完整播放事实存在时归为 class B observer-only-miss，不能写成 Pepper initialization failure，也不能 silent PASS。
 60. run-scoped readiness state 需要 runId、时间边界和 bridge identity；旧 run 的 ready event 即使晚到也不能污染新 run。loadfile 或产品函数调用不可观测时保留 unavailable/observation wording，不用 manager resolved 替代未取得的信号。
+61. 产品 app identity 必须在正式 Electron startup 中从 runtime `electronapp/package.json` 使用 `productName || name` 显式设置，并与 acceptance runner 复用同一语义；只修 acceptance 入口会留下正式产品的 Session identity 分叉风险。版本与 device identity 不应因该修复改变。

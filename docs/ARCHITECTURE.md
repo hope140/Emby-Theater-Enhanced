@@ -17,3 +17,5 @@ STRM resolver settings 由 `enhanced/strm-config-store.js` 持久化 schema vers
 `vendor/` 保留已校验的输入说明与文件清单，解包 runtime 不进版本控制；`src/electronapp/` 是可维护应用层；`tools/` 负责本地构建与验证；`installer/` 只负责安装。`src/electronapp/preload.js` 是由 `tools/prepare-preload.cjs` 从 `vendor/carnival/electronapp/preload.js` 生成的 prepared workspace artifact，不是开发机 source；runtime provenance 单独校验 base、generator、prepared 和 runtime hash。该生成 block 只提供非阻塞 diagnostics/sticky observation，不改变 Pepper 创建、播放、停止或 Session 生命周期。继续保留 vendor 目录布局以免破坏相对加载路径。
 
 正式安装入口直接启动 `{app}\Emby.Theater.exe`。Electron main process 在创建窗口前执行幂等 bootstrap，按 `{runtime}\config\system.xml` 作为 seed，只补齐 Enhanced profile 的 `config`、`cec-driver`、缺失 `system.xml` 和 `cancel`，不覆盖用户文件、不改变 `ProgramDataPath`，也不启动外部进程。
+
+正式产品的 app identity 以 runtime 同目录 `electronapp/package.json` 的 `productName || name` 为权威来源，由 `product-identity.js` 在 `loadStartInfo`、BrowserWindow 和 ConnectionManager 初始化前设置 Electron `app.name`。Acceptance runner 复用同一 helper 和同一 fallback 语义；版本继续使用现有 `app.getVersion()`，deviceName/deviceId 继续使用主机名。
