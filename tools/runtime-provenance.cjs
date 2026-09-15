@@ -12,7 +12,6 @@ const PACKAGE_GENERATOR_PATH = 'tools/build.ps1';
 const APP_RUNTIME_PATH = 'electronapp/www/app.js';
 const APP_SOURCE_PATH = 'src/electronapp/www/app.js';
 const APP_GENERATOR_PATH = 'tools/patch-external-player-registration.cjs';
-const START_WRAPPERS = ['tools/Start-Enhanced.ps1', 'tools/Start-Enhanced.cmd'];
 const PREPARED_SOURCE_PATHS = Object.freeze([preloadPreparation.PREPARED_PRELOAD_PATH]);
 const PREPARED_ARTIFACT_CONTRACT = Object.freeze([{
     preparedPath: preloadPreparation.PREPARED_PRELOAD_PATH,
@@ -102,9 +101,6 @@ function sourceEntries(root) {
             relation: 'copied'
         };
     }).filter(Boolean);
-    for (const wrapper of START_WRAPPERS) {
-        entries.push({sourcePath: wrapper, runtimePath: slash(path.basename(wrapper)), relation: 'copied'});
-    }
     for (const entry of entries) {
         const generatorPath = OVERLAY_GENERATORS.get(entry.runtimePath);
         if (generatorPath) {
@@ -189,10 +185,9 @@ function writeManifest(root, runtime, sourceCommit) {
             sourceRoot: 'src/electronapp',
             runtimeRoot: 'electronapp',
             includesIgnoredSourceFiles: true,
-            includesStartWrappers: true,
             excludedSourcePrefixes: [...EXCLUDED_SOURCE_PREFIXES],
             preparedSourcePaths: [...PREPARED_SOURCE_PATHS],
-            description: 'All non-excluded repo-owned src/electronapp files plus Start-Enhanced wrappers; prepared workspace artifacts and package metadata/PlaybackManager are recorded separately',
+            description: 'All non-excluded repo-owned src/electronapp files; prepared workspace artifacts and package metadata/PlaybackManager are recorded separately',
             fileCount: files.length,
             files
         },

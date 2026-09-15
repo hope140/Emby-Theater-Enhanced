@@ -6,6 +6,13 @@
     var BrowserView = electron.BrowserView;  // Module to create native browser window.
     var powerSaveBlocker = electron.powerSaveBlocker
     var nativeImage = electron.nativeImage;
+    var path = require('path');
+    var appBootstrap = require('./enhanced/bootstrap');
+
+    appBootstrap.bootstrap({
+        appDataPath: app.getPath('appData'),
+        runtimeRoot: path.resolve(__dirname, '..')
+    });
 
     // Keep a global reference of the window object, if you don't, the window will
     // be closed automatically when the JavaScript object is garbage collected.

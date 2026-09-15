@@ -36,7 +36,7 @@ try {
         if (-not (Test-Path -LiteralPath $desktopLink) -or -not (Test-Path -LiteralPath $menuLink)) { throw 'Installation shortcuts missing.' }
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($menuLink)
-        if (-not $shortcut.Arguments.Contains((Join-Path $target 'Start-Enhanced.ps1')) -or $shortcut.WorkingDirectory -ne $target) { throw 'Shortcut points to another application.' }
+        if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne [IO.Path]::GetFullPath((Join-Path $target 'Emby.Theater.exe')) -or [string]$shortcut.Arguments -ne '' -or $shortcut.WorkingDirectory -ne $target) { throw 'Shortcut does not point directly to Emby.Theater.exe.' }
         $result.steps += [ordered]@{version=$version;exitCode=$setupProcess.ExitCode;payloadFiles=$fileCount;registry=$true;desktopShortcut=$true;startMenuShortcut=$true}
         Write-Result
         Write-Output "Installed and verified $version ($fileCount files)."

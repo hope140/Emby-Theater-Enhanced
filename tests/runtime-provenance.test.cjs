@@ -80,6 +80,8 @@ test('runtime provenance excludes the exact legacy subtree without weakening nor
             path.join(runtimeWithLegacySource, 'runtime-provenance.json'), 'utf8'
         ));
         const scopeWithLegacySource = manifestWithLegacySource.validatedProductScope;
+        assert.equal(scopeWithLegacySource.files.some(entry => entry.sourcePath === 'tools/Start-Enhanced.ps1'), false);
+        assert.equal(scopeWithLegacySource.files.some(entry => entry.sourcePath === 'tools/Start-Enhanced.cmd'), false);
         assert.deepEqual(scopeWithLegacySource.excludedSourcePrefixes, [
             'src/electronapp/www/modules/externalplayer/'
         ]);

@@ -33,8 +33,8 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Source: "{#RuntimeDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Emby Theater Enhanced"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Enhanced.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\electronapp\icon.ico"
-Name: "{autodesktop}\Emby Theater Enhanced"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Enhanced.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\electronapp\icon.ico"; Tasks: desktopicon
+Name: "{group}\Emby Theater Enhanced"; Filename: "{app}\Emby.Theater.exe"; WorkingDir: "{app}"; IconFilename: "{app}\electronapp\icon.ico"
+Name: "{autodesktop}\Emby Theater Enhanced"; Filename: "{app}\Emby.Theater.exe"; WorkingDir: "{app}"; IconFilename: "{app}\electronapp\icon.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Enhanced.ps1"""; Description: "Launch Emby Theater Enhanced"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\Emby.Theater.exe"; WorkingDir: "{app}"; Description: "Launch Emby Theater Enhanced"; Flags: nowait postinstall skipifsilent runasoriginaluser
