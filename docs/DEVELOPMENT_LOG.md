@@ -6,7 +6,17 @@ Model Tier：2。Reason：真实服务器 A/B 已证明 OLD 的 hostname DeviceI
 
 分支 `fix/stable-enhanced-device-id` 从 `origin/main@780aaed8ddc5bde42654e56e7635379f29f9e485` 创建，没有带入 `fix/product-session-identity`。main process 使用既有 ETE bootstrap config 目录中的 `device-identity.json` 作为持久化边界，首次运行生成 UUID v4，后续启动读取同一值；损坏/缺失时使用同目录临时文件、fsync 和 rename 重建。`deviceName` 仍为 hostname，旧 hostname DeviceId 不迁移。
 
-新增 `src/electronapp/device-identity.js` 与 `tests/device-identity.test.cjs`，覆盖首次生成、同 profile 稳定、clean profile 隔离、hostname 分离、损坏重建、randomBytes fallback、启动顺序、HTTP/WS identity 链和无 token/user/server 依赖。验证：targeted 9/9，`npm test` 110/110，相关 JavaScript syntax 与 `git diff --check` 通过。没有进行真实服务器授权验收；candidate 将在提交后的 HEAD 上构建，真实安装/远控由用户后续验收。
+新增 `src/electronapp/device-identity.js` 与 `tests/device-identity.test.cjs`，覆盖首次生成、同 profile 稳定、clean profile 隔离、hostname 分离、损坏重建、randomBytes fallback、启动顺序、HTTP/WS identity 链和无 token/user/server 依赖。验证：targeted 9/9，`npm test` 110/110，相关 JavaScript syntax 与 `git diff --check` 通过。提交后的 source build、runtime provenance、package verify 和 candidate installer 均通过；正式安装后的 REAL acceptance 见下方收尾记录。
+
+## 2026-09-15 — Stable Enhanced DeviceId REAL acceptance closure
+
+Model Tier：1。Reason：本条仅收录用户完成的正式 Windows candidate 安装、播放、远控与重启稳定性验收，不修改产品代码或测试。Escalated：no。
+
+候选安装包：`EmbyTheaterEnhanced-0.1.1-stable-device-id-candidate-aba1145-setup.exe`；SHA256：`B3D57CBC1E50DD5EEBAA5E5563D8C83831BC3959AEE76D1E99A00845E6F8E51F`。验收分支为 `fix/stable-enhanced-device-id`，代码 HEAD 为 `aba114552e181afad011ff56eef1083ca39ddeea`。
+
+REAL acceptance 全部通过：STRM playback、next episode、playback progress reporting、Dashboard remote-control buttons、`SupportsRemoteControl`、WebSocket、DeviceId 与 hostname 分离、DeviceId 重启稳定性均为 `PASS`。第一次 ETE DeviceId hash 为 `065ce40875be5fbb`，第二次仍为 `065ce40875be5fbb`；hostname-derived DeviceId hash 为 `104ab9213e28e4ff`。当前真实 Session 的 `NowPlayingItem` 存在，PositionTicks 持续增加，`SupportsMediaControl=true`，WebSocket 为 `OPEN`。
+
+本轮没有直接捕获 `Sessions/Capabilities/Full` 的 HTTP status，因此不记录或推断为 `204 PASS`；`SupportsMediaControl=true` 仅按当前真实 capability 状态与服务器远控行为记录。该修复验证的是 ETE 独立、持久化 DeviceId。此前 OLD runtime 的控制变量 A/B 已证明，在相同 runtime、token 和 UserId 下，原 DeviceId 为 `remote=false`，仅改变 DeviceId 后为 `remote=true`。本记录不把历史每一次 `SupportsRemoteControl=false` 宣称为已完全还原，`fix/product-session-identity` 也不属于本修复。
 
 ## 2026-09-15 — Direct app launch 真实安装验收收尾
 

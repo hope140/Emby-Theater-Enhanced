@@ -4,7 +4,9 @@
 
 分支 `fix/stable-enhanced-device-id` 基于 `origin/main@780aaed8ddc5bde42654e56e7635379f29f9e485`，未基于 `fix/product-session-identity`。本轮只将正式 ETE 的 DeviceId 从 `os.hostname()` 改为 ETE 自有 config 目录中持久化的随机 UUID；DeviceName 继续使用 hostname。缺失/损坏 identity 文件会原子重建，升级保留，clean profile 生成新值；不迁移旧 hostname DeviceId，不修改服务器 Device/Session、token、capability、WebSocket 或播放链。`app.setName/productName` 不在本分支范围。
 
-新增 identity helper 与 9 项回归测试；当前实现 targeted identity tests 9/9、全量 `npm test` 110/110、JS syntax 和 `git diff --check` 已通过。source build、runtime provenance、package verify 和 Windows candidate installer 在提交后执行并单独记录。
+新增 identity helper 与 9 项回归测试；当前实现 targeted identity tests 9/9、全量 `npm test` 110/110、JS syntax 和 `git diff --check` 已通过。提交后的 source build、runtime provenance、package verify 和 Windows candidate installer 均通过。candidate 为 `EmbyTheaterEnhanced-0.1.1-stable-device-id-candidate-aba1145-setup.exe`，SHA256 为 `B3D57CBC1E50DD5EEBAA5E5563D8C83831BC3959AEE76D1E99A00845E6F8E51F`。
+
+正式安装后的 REAL acceptance 全部通过：STRM playback、next episode、playback progress reporting、Dashboard remote-control buttons、`SupportsRemoteControl`、WebSocket、DeviceId 与 hostname 分离、DeviceId 重启稳定性均为 `PASS`。第一次与第二次 ETE DeviceId hash 均为 `065ce40875be5fbb`，hostname-derived DeviceId hash 为 `104ab9213e28e4ff`；真实 Session 的 `NowPlayingItem` 存在、PositionTicks 持续增加，`SupportsMediaControl=true`，WebSocket 为 `OPEN`。本轮没有直接捕获 `Sessions/Capabilities/Full` 的 HTTP status，不记录或推断为 `204 PASS`。本次只验证 ETE 独立持久 DeviceId；OLD runtime 的 A/B 已在相同 runtime、token、UserId 下证明原 DeviceId 为 `remote=false`、仅改变 DeviceId 后为 `remote=true`。`fix/product-session-identity` 不属于本修复。
 
 ## 2026-09-15 — Direct app launch Daily-use Candidate 修复（REAL PASS — direct app launch）
 
