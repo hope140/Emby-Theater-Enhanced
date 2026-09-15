@@ -941,9 +941,10 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         self.currentTime = function (val) {
 
             if (val != null) {
+                var request = activePlayRequest;
                 sendCommand(['seek', `${Math.floor(val / 1000)}`, 'absolute', 'exact']).then(function () {
 
-                    emitClientDiagnostic('info', 'playback', 'seek', requestDiagnosticDetails(activePlayRequest));
+                    emitClientDiagnostic('info', 'playback', 'seek', requestDiagnosticDetails(request));
                     events.trigger(self, 'seek');
                 });
                 return;
@@ -953,11 +954,12 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
         };
 
         function seekRelative(offsetMs) {
-                sendCommand(['seek', `${Math.floor(offsetMs / 1000)}`, 'relative']).then(function () {
+            var request = activePlayRequest;
+            sendCommand(['seek', `${Math.floor(offsetMs / 1000)}`, 'relative']).then(function () {
 
-                    emitClientDiagnostic('info', 'playback', 'seek', requestDiagnosticDetails(activePlayRequest));
-                    events.trigger(self, 'seek');
-                });
+                emitClientDiagnostic('info', 'playback', 'seek', requestDiagnosticDetails(request));
+                events.trigger(self, 'seek');
+            });
         }
 
         self.rewind = function (offsetMs) {
