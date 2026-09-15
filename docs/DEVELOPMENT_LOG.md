@@ -1,5 +1,11 @@
 # 开发日志
 
+## 2026-09-15 — Fix ETE_CD2_ENABLED legacy migration
+
+在 `bootstrapLegacy()` 中修复 legacy 开关映射：`ETE_CD2_ENABLED` 现在只迁移为 `config.cd2.enabled`，bootstrap 时 top-level `config.enabled` 始终为 `true`。因此旧环境 `ETE_CD2_ENABLED=0` 只关闭 CloudDrive2 service，STRM resolver 仍保持启用并可在 CD2 disabled/miss 后进入 Mount → Native；`ETE_CD2_ENABLED=1` 同时得到 global resolver enabled 与 CD2 enabled。新设置页保存的 top-level `enabled` 语义和 persistent USER 配置优先级保持不变，resolver stage architecture 未修改。
+
+新增 regression test 覆盖 `ETE_CD2_ENABLED=0`、有效 source/mount mapping、CD2 disabled 后 Mount 命中和不返回 `resolver_disabled`；既有 `ETE_CD2_ENABLED=1` 测试同时确认 global resolver 与 CD2 均启用。Node targeted tests 21/21、`npm test` 98/98、JavaScript syntax 和 `git diff --check` 通过。最终 HEAD 的 build、runtime provenance 和 package verify 通过；Final-head synthetic runtime smoke 记录为 `NOT COMPLETED — hidden Electron smoke timeout`，本轮未重新运行或重试。REAL settings UI 继续记录为 `NOT COVERED — native window automation unavailable`，真实服务器 cloud-first/mount-first playback 继续 NOT COVERED。
+
 ## 2026-09-15 — Fix STRM rule-selection identity precedence
 
 在 `feat/strm-resolver-settings@2956267` 上修复 `selectRule()`：可识别的绝对 `sourcePath` 现在独占 longest-prefix match；source 没有命中时直接返回 null，不再由更长的 `Item.Path` sidecar rule 接管。只有 HTTP/非绝对 source path 才使用 sidecar identity fallback。Windows/UNC case-insensitive、POSIX case-sensitive 和目录边界保持不变。

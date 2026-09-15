@@ -43,7 +43,7 @@ Resolver 使用三个严格分离的路径字段。
 ## CloudDrive2 rules
 
 1. 复用 Mount Resolver 的确定性媒体候选，不扫描目录、不解析 provider opaque id。
-2. main process 以 persistent schema version 1 配置为 authoritative source；首次启动且没有持久化配置时才读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX` 做 AUTO bootstrap。token 不进入 renderer、诊断或日志。
+2. main process 以 persistent schema version 1 配置为 authoritative source；首次启动且没有持久化配置时才读取 `ETE_CD2_ENABLED`、`ETE_CD2_ORIGIN`、`ETE_CD2_TOKEN`、`ETE_CD2_LOCAL_PREFIX` 与 `ETE_CD2_CLOUD_PREFIX` 做 AUTO bootstrap。`ETE_CD2_ENABLED` 只迁移为 `cd2.enabled`，bootstrap 时 top-level `config.enabled` 保持 `true`；因此 legacy `0` 只关闭 CD2 service，STRM resolver 仍可继续 Mount → Native。token 不进入 renderer、诊断或日志。
 3. 每条命中规则独立执行 source prefix → POSIX cloud prefix mapping，并保留 source/mount/cloud 三种路径语义；drive/UNC 大小写不敏感，absolute POSIX 大小写敏感，均严格检查路径边界并拒绝 `..`。absolute POSIX `MediaSource.Path` 带 allowlisted 媒体后缀时是确定性 CD2 candidate；在 Windows client 上它不会进入 `existsSync` Mount 检查，只能由 CD2 命中，否则继续下一 stage。
 4. 先调用 `GetDownloadUrlPath(... get_direct_url=true)`；只有安全 HTTP(S) DirectUrl、空 additionalHeaders、受限可打印 ASCII User-Agent 与有效 expiry 才可直连。任意 additionalHeaders、控制字符、逗号/反斜杠 UA、无效/近过期 URL 均优先 same-origin。
 5. `direct-url` 与 `cd2-http` 通过同一 main service 的窄 mode 区分；DirectUrl miss/unsupported/transport failure 后按当前规则的下一 stage 取得同源 URL。连续 CD2 stages 复用 Find 结果并共享 750ms absolute budget。Abort/superseded 不进入 fallback。

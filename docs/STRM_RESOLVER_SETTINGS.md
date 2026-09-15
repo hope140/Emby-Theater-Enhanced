@@ -109,6 +109,8 @@ ETE_CD2_CLOUD_PREFIX
 ETE_CD2_DIRECT_URL
 ```
 
+迁移语义：`ETE_CD2_ENABLED` 只写入新版 `cd2.enabled`。bootstrap 时 top-level `config.enabled` 始终为 `true`；因此 `ETE_CD2_ENABLED=0` 只关闭 CloudDrive2 service，persistent STRM resolver 仍可继续执行 Mount → Native，`ETE_CD2_ENABLED=1` 则得到 global resolver enabled 与 CD2 enabled。新设置页保存的 top-level `enabled` 仍由用户主动控制，不受 legacy 开关覆盖。
+
 有效值会 bootstrap 为 `AUTO` rule，并将 token 写入 main-process-only secret 文件。bootstrap 后 persistent config 优先级为：
 
 ```text

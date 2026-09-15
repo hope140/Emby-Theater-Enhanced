@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1
 python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv/x64/mpv-1.dll
 ```
 
-单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount、persistent profile inspect 安全枚举、prepared preload source-of-truth、readiness A/B/C/D/E 证据分类、persistent STRM config store、IPC trust boundary、secret redaction、longest-prefix、source identity precedence、AUTO/USER/DISABLED、per-rule strategy order 和 bounded authenticated connection probe。当前为 97/97。修改 JS 已通过 node --check；PS 脚本由实际 Windows PowerShell 5.1 构建与打包验证。
+单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount、persistent profile inspect 安全枚举、prepared preload source-of-truth、readiness A/B/C/D/E 证据分类、persistent STRM config store、IPC trust boundary、secret redaction、longest-prefix、source identity precedence、legacy `ETE_CD2_ENABLED` 只迁移 `cd2.enabled`、AUTO/USER/DISABLED、per-rule strategy order 和 bounded authenticated connection probe。当前为 98/98。修改 JS 已通过 node --check；PS 脚本由实际 Windows PowerShell 5.1 构建与打包验证。
 
 ## STRM resolver settings targeted checks
 
@@ -16,11 +16,11 @@ python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv
 node --test tests/strm-resolver-settings.test.cjs
 ```
 
-该 suite 覆盖 config schema/version、独立 secret 文件、legacy env bootstrap、USER persistent precedence、路径边界和大小写语义、最长前缀、mount replacement、cloud-first、mount-first、custom order、Native fallback、Abort、CD2 direct/same-origin mode reuse、规则测试、trusted renderer IPC 和 bounded read-only connection probe。测试只使用 synthetic paths/token，token 不进入测试输出。
+该 suite 覆盖 config schema/version、独立 secret 文件、legacy env bootstrap（包括 `ETE_CD2_ENABLED=0` 时 resolver enabled、CD2 disabled 与 Mount fallback）、USER persistent precedence、路径边界和大小写语义、最长前缀、mount replacement、cloud-first、mount-first、custom order、Native fallback、Abort、CD2 direct/same-origin mode reuse、规则测试、trusted renderer IPC 和 bounded read-only connection probe。测试只使用 synthetic paths/token，token 不进入测试输出。
 
 ## STRM settings runtime boundary
 
-新 runtime 已执行可见 synthetic Electron pipeline，覆盖 persistent config bootstrap 后的 DirectUrl fake hit、CD2 HTTP fake hit、CD2 miss → Mount/Native fallback、PlaybackManager/Session/controls/reporting/cleanup。真实 settings page 的 native-window 自动化在当前环境不可用，真实服务器 cloud-first/mount-first 播放也不在本分支宣称范围内。
+较早候选 HEAD `295626753089de9f70c2cb28b5c5954be51b3843` 已执行 synthetic Electron pipeline 并通过，覆盖 persistent config bootstrap 后的 DirectUrl fake hit、CD2 HTTP fake hit、CD2 miss → Mount/Native fallback、PlaybackManager/Session/controls/reporting/cleanup。source identity precedence 修复后的 final-head hidden Electron synthetic runtime smoke 因 timeout 未完成，记录为 `Final-head synthetic runtime smoke: NOT COMPLETED — hidden Electron smoke timeout`，按限制未重试；该 timeout 不判定产品功能失败。真实 settings page 的 native-window 自动化在当前环境不可用，真实服务器 cloud-first/mount-first 播放也不在本分支宣称范围内。
 
 ## Acceptance readiness harness
 
