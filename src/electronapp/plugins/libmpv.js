@@ -1,4 +1,4 @@
-define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter', 'appSettings', 'userSettings', 'require', 'connectionManager', '../resolvers/strm-resolver.js'], function (globalize, playbackManager, pluginManager, events, embyRouter, appSettings, userSettings, require, connectionManager, strmResolver) {
+define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter', 'appSettings', 'userSettings', 'require', 'connectionManager', '../resolvers/strm-resolver.js', '../resolvers/strm-config-client.js'], function (globalize, playbackManager, pluginManager, events, embyRouter, appSettings, userSettings, require, connectionManager, strmResolver, strmConfigClient) {
     'use strict';
 
     function getTextTrackUrl(subtitleStream, serverId) {
@@ -189,6 +189,19 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
                 category: 'Playback',
                 thumbImage: '',
                 icon: 'tv',
+                settingsTheme: true,
+                adjustHeaderForEmbeddedScroll: true
+            });
+
+            routes.push({
+                path: 'mpvplayer/strm.html',
+                transition: 'slide',
+                controller: pluginManager.mapPath(self, 'mpvplayer/strm.js'),
+                type: 'settings',
+                title: 'STRM 智能解析',
+                category: 'Playback',
+                thumbImage: '',
+                icon: 'folder_open',
                 settingsTheme: true,
                 adjustHeaderForEmbeddedScroll: true
             });
@@ -642,9 +655,22 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
             var nativeSource = options.url;
             var url = nativeSource;
             var resolverResult;
+            var resolverConfig = null;
             var fileLocalLoadOptions;
 
             try {
+                if (strmResolver && typeof strmResolver.isStrm === 'function' && strmResolver.isStrm({
+                    item: item,
+                    mediaSource: mediaSource,
+                    sidecarPath: item && item.Path,
+                    sourcePath: mediaSource && mediaSource.Path,
+                    nativeSource: nativeSource,
+                    playMethod: options.playMethod,
+                    streamInfo: options
+                }) && strmConfigClient && typeof strmConfigClient.get === 'function') {
+                    resolverConfig = await strmConfigClient.get();
+                    assertCurrentPlayRequest(request);
+                }
                 resolverResult = await strmResolver.resolveAsync({
                     item: item,
                     mediaSource: mediaSource,
@@ -656,7 +682,8 @@ define(['globalize', 'playbackManager', 'pluginManager', 'events', 'embyRouter',
                 }, {
                     fs: typeof window !== 'undefined' ? window.fs : null,
                     requestId: request.requestId,
-                    signal: request.controller.signal
+                    signal: request.controller.signal,
+                    config: resolverConfig
                 });
             } catch (err) {
                 if (err && (err.name === 'AbortError' || err.playbackSuperseded)) throw supersededError();

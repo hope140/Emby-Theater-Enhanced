@@ -16,7 +16,9 @@ if (process.env.ETE_TEST_PIPELINE) {
     const media = fs.readFileSync(process.env.ETE_TEST_MEDIA);
     const server = require('http').createServer((request,response) => {
         const parsedRequest = new URL(request.url, 'http://127.0.0.1');
-        const directRequestId = parsedRequest.searchParams.get('cd2');
+        const directRequestId = process.env.ETE_TEST_CD2_MODE === 'direct'
+            ? parsedRequest.searchParams.get('cd2')
+            : null;
         const expectedDirectUa = directRequestId ? 'ETE-Direct-' + directRequestId : null;
         const observedUa = request.headers['user-agent'] || '';
         const directUaMatch = expectedDirectUa ? observedUa === expectedDirectUa : null;
@@ -49,7 +51,7 @@ let testWindow;
 function finish(result) {
     if (completed) return;
     completed = true;
-    result.cd2EnvironmentCleared = ['ETE_CD2_ENABLED','ETE_CD2_ORIGIN','ETE_CD2_TOKEN','ETE_CD2_LOCAL_PREFIX','ETE_CD2_CLOUD_PREFIX','ETE_CD2_DIRECT_URL']
+    result.cd2EnvironmentCleared = ['ETE_CD2_ENABLED','ETE_CD2_ORIGIN','ETE_CD2_TOKEN','ETE_CD2_LOCAL_PREFIX','ETE_CD2_CLOUD_PREFIX','ETE_CD2_DIRECT_URL','ETE_CD2_SOURCE_PREFIX','ETE_CD2_MOUNT_PREFIX']
         .every(name => process.env[name] === undefined);
     if (!result.cd2EnvironmentCleared) result.ok = false;
     result.mediaRequestSummary = {

@@ -1,0 +1,71 @@
+<div is="emby-scroller" class="view flex flex-direction-column scrollFrameY flex-grow" data-mousewheel="true" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="card" data-bindheader="true">
+    <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page settingsContainer ete-strm-settings">
+        <form class="auto-center" novalidate>
+            <section class="ete-strm-hero" aria-labelledby="ete-strm-title">
+                <div>
+                    <h1 id="ete-strm-title">STRM 智能解析</h1>
+                    <p>为不同源路径选择 CloudDrive2、挂载路径或原生播放的尝试顺序。</p>
+                </div>
+                <span class="ete-strm-hero-mark" aria-hidden="true">STRM</span>
+            </section>
+
+            <div class="checkboxContainer checkboxContainer-withDescription ete-strm-panel">
+                <label>
+                    <input type="checkbox" is="emby-checkbox" class="chkEnabled" />
+                    <span>启用智能解析</span>
+                </label>
+                <div class="fieldDescription checkboxFieldDescription">仅替换最终播放 source，原有 PlaybackManager、Session 和远控流程保持不变。</div>
+            </div>
+
+            <fieldset class="ete-strm-panel ete-strm-fieldset">
+                <legend>CloudDrive2</legend>
+                <div class="inputContainer">
+                    <label for="ete-cd2-origin">地址</label>
+                    <input is="emby-input" type="url" id="ete-cd2-origin" class="txtCd2Origin" autocomplete="url" />
+                    <div class="fieldDescription">使用本机 CloudDrive2 gRPC 服务地址，例如 http://127.0.0.1:19798。</div>
+                </div>
+                <div class="ete-strm-token-row">
+                    <span class="ete-strm-label">Token</span>
+                    <span class="tokenState secondaryText" aria-live="polite">未配置</span>
+                    <input is="emby-input" type="password" class="txtCd2Token" autocomplete="new-password" aria-label="CloudDrive2 Token" />
+                    <button type="button" is="emby-button" class="button-submit btnSetToken">设置新 Token</button>
+                    <button type="button" is="emby-button" class="btnClearToken">清除</button>
+                </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input type="checkbox" is="emby-checkbox" class="chkCd2Enabled" />
+                        <span>启用 CloudDrive2</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">Token 只保存在 Electron main process，页面不会读取已保存的 Token。</div>
+                </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input type="checkbox" is="emby-checkbox" class="chkDirectUrlEnabled" />
+                        <span>启用 DirectUrl capability</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">是否真正优先由下方路径规则的解析策略决定；不安全时自动回退到同源 HTTP。</div>
+                </div>
+                <div class="ete-strm-actions">
+                    <button type="button" is="emby-button" class="btnTestConnection">测试连接</button>
+                    <span class="connectionState secondaryText" role="status" aria-live="polite"></span>
+                </div>
+            </fieldset>
+
+            <section class="ete-strm-panel" aria-labelledby="ete-rules-title">
+                <div class="ete-strm-section-heading">
+                    <div>
+                        <h2 id="ete-rules-title">路径规则</h2>
+                        <p class="fieldDescription">按源路径最长前缀匹配；Windows drive/UNC 不区分大小写，POSIX 路径区分大小写。</p>
+                    </div>
+                    <button type="button" is="emby-button" class="button-submit btnAddRule">添加路径规则</button>
+                </div>
+                <div class="rulesList"></div>
+            </section>
+
+            <div class="ete-strm-form-actions">
+                <button type="submit" is="emby-button" class="raised button-submit btnSave">保存设置</button>
+                <span class="saveState secondaryText" role="status" aria-live="polite"></span>
+            </div>
+        </form>
+    </div>
+</div>
