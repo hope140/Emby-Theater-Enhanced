@@ -8,7 +8,7 @@ Model Tier：1。Reason：范围限定为 Electron main-process bootstrap、inst
 
 新增 `src/electronapp/enhanced/bootstrap.js`，由 main process 在窗口创建前按实际 packaged layout `{runtime}\electronapp\main.js` → `{runtime}\config\system.xml` 执行幂等初始化：创建 `%APPDATA%\EmbyTheaterEnhanced\config` 与 `cec-driver`，只为缺失的 `system.xml` seed，为缺失的 `cec-driver\cancel` 创建空文件；既有用户文件保持原样。`ProgramDataPath` 未改，未引入外部进程。`Start-Enhanced.ps1/.cmd` 保留为源码工具，但不再由 `tools/build.ps1` 复制进正式 runtime，provenance scope 同步移除 wrapper entries。
 
-验证：bootstrap/installer targeted 3/3；相关 targeted 合并检查 5/5；全量 `npm test` 101/101；68 个 JavaScript/CJS syntax、11 个 PowerShell syntax、`git diff --check` 通过。新候选 runtime/package 及安装包完整性将在提交后的当前 HEAD 上执行；真实安装后的桌面、开始菜单、安装完成 Launch 和直接 exe 四入口仍待用户手工验收，当前不写 REAL PASS。
+验证：bootstrap/installer targeted 3/3；相关 targeted 合并检查 5/5；全量 `npm test` 101/101；68 个 JavaScript/CJS syntax、11 个 PowerShell syntax、`git diff --check` 通过。实现提交 `60e0759e42c6fad737906bbaca247957d7a41fea` 的 source build/runtime provenance/package verify 通过，runtime 实际 2,123 文件、payload entries 2,122、product scope 784。独立 staging 编译的 installer 为 `dist/EmbyTheaterEnhanced-0.1.1-direct-app-launch-setup.exe`，125,154,262 bytes，SHA256 `0c6a722cab9fc70ec49c32ac69a818c3c1b0c1b19ce018e26834ebb8c3114596`；Inno archive integrity 通过，解包 `{app}` 2,123 文件逐文件 hash 对齐，missing/extra/mismatch=0，legacy launcher=0。已构建 runtime 的 bootstrap seed/preserve 隔离检查通过。真实安装后的桌面、开始菜单、安装完成 Launch 和直接 exe 四入口仍待用户手工验收，当前不写 REAL PASS。
 
 ## 2026-09-15 — Daily-use Candidate 验证与打包准备
 
