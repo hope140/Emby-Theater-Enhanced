@@ -117,6 +117,8 @@ test('legacy environment bootstraps one AUTO rule once and persistent config win
     const first = configStore.createStore({rootDir: root, environment: legacy});
     const firstConfig = first.getPublicConfig();
 
+    assert.equal(firstConfig.enabled, true);
+    assert.equal(firstConfig.cd2.enabled, true);
     assert.equal(firstConfig.cd2.directUrlEnabled, false);
     assert.equal(firstConfig.cd2.tokenConfigured, true);
     assert.equal(firstConfig.rules.length, 1);
@@ -129,6 +131,45 @@ test('legacy environment bootstraps one AUTO rule once and persistent config win
         environment: Object.assign({}, legacy, {ETE_CD2_DIRECT_URL: '1', ETE_CD2_LOCAL_PREFIX: 'Y:\\changed'})
     });
     assert.deepEqual(second.getPublicConfig(), firstConfig);
+});
+
+test('legacy CD2 disabled keeps STRM resolver enabled and reaches Mount', async () => {
+    const root = temporaryRoot('ete-strm-legacy-disabled-');
+    const store = configStore.createStore({
+        rootDir: root,
+        environment: {
+            ETE_CD2_ENABLED: '0',
+            ETE_CD2_ORIGIN: 'http://127.0.0.1:19798',
+            ETE_CD2_SOURCE_PREFIX: '/media/115',
+            ETE_CD2_MOUNT_PREFIX: 'X:\\115',
+            ETE_CD2_CLOUD_PREFIX: '/115'
+        }
+    });
+    const config = store.getPublicConfig();
+    const service = cd2Service.createService({config: store.getRuntimeConfig()});
+
+    assert.equal(config.enabled, true);
+    assert.equal(config.cd2.enabled, false);
+    assert.equal(service.configState(), 'disabled');
+
+    try {
+        const result = await strmResolver.resolveAsync(playbackContext('/media/115/Movies/Dune.mkv'), {
+            config: config,
+            fs: {existsSync: value => value === 'X:\\115\\Movies\\Dune.mkv'},
+            requestId: 'legacy-cd2-disabled',
+            cd2Transport: {
+                resolve: request => service.resolve(request),
+                cancel: requestId => service.cancel(requestId)
+            }
+        });
+
+        assert.equal(result.type, 'local');
+        assert.equal(result.source, 'X:\\115\\Movies\\Dune.mkv');
+        assert.equal(result.reason, 'mount_hit');
+        assert.notEqual(result.reason, 'resolver_disabled');
+    } finally {
+        service.close();
+    }
 });
 
 test('config validation rejects traversal and incomplete custom order', () => {

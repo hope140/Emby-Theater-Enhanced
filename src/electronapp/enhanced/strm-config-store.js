@@ -236,7 +236,7 @@ function bootstrapLegacy(environment) {
     return {
         config: {
             version: SCHEMA_VERSION,
-            enabled: enabled,
+            enabled: true,
             cd2: {
                 enabled: enabled,
                 origin: origin,
