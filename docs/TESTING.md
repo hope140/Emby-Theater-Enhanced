@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-runtime.ps1
 python tools/probe-libmpv.py dist/EmbyTheaterEnhanced-win-x64/electronapp/libmpv/x64/mpv-1.dll
 ```
 
-单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount、persistent profile inspect 安全枚举、prepared preload source-of-truth、readiness A/B/C/D/E 证据分类、persistent STRM config store、IPC trust boundary、secret redaction、longest-prefix、AUTO/USER/DISABLED、per-rule strategy order 和 bounded authenticated connection probe。当前为 94/94。修改 JS 已通过 node --check；PS 脚本由实际 Windows PowerShell 5.1 构建与打包验证。
+单元测试覆盖属性无回复、空值、桥接异常、监听器释放、日志脱敏与重复脱敏、外置插件读取旧配置/进程执行的封锁、External Player process-chain dead channel/helper absence 与 `shell.openUrl` protocol contract，以及 STRM/CD2 Resolver 的判定、Windows/UNC/POSIX mapping、DirectUrl/UA/header/expiry、RPC/transport reject、共享 deadline、Abort/cancel/late callback、DirectUrl → same-origin → Mount → Native、Transcode、POSIX candidate 不进入 Windows Mount、persistent profile inspect 安全枚举、prepared preload source-of-truth、readiness A/B/C/D/E 证据分类、persistent STRM config store、IPC trust boundary、secret redaction、longest-prefix、source identity precedence、AUTO/USER/DISABLED、per-rule strategy order 和 bounded authenticated connection probe。当前为 97/97。修改 JS 已通过 node --check；PS 脚本由实际 Windows PowerShell 5.1 构建与打包验证。
 
 ## STRM resolver settings targeted checks
 

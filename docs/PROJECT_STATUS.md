@@ -6,7 +6,7 @@
 
 配置保存后立即持久化，当前 CD2 service 不做 hot reload，页面提示重启后播放链生效。legacy `ETE_CD2_*` 只在首次 bootstrap 时迁移为 AUTO；persistent USER/AUTO/DISABLED 状态优先，renderer GET 只得到 `tokenConfigured`，不得到 token、Bearer metadata、raw gRPC client 或完整 DirectUrl。
 
-静态与自动化验证：新增 settings suite 17/17；全量 `npm test` 94/94；Windows/UNC/POSIX boundary、`..` 拒绝、最长前缀、规则 ownership、strategy order、mount replacement、DirectUrl/same-origin mode、Native fallback、Abort 和 bounded authenticated connection probe 均覆盖。新 runtime 已通过 source build、provenance 和 package payload verify；可见 synthetic pipeline 的 DirectUrl fake、CD2 HTTP fake、CD2 miss fallback、PlaybackManager/Session/controls/reporting/cleanup 证据保留。
+静态与自动化验证：新增 settings suite 20/20；全量 `npm test` 97/97；覆盖 Windows/UNC/POSIX boundary、`..` 拒绝、source identity precedence、最长前缀、规则 ownership、strategy order、mount replacement、DirectUrl/same-origin mode、Native fallback、Abort 和 bounded authenticated connection probe。新 runtime 已通过 source build、provenance 和 package payload verify；synthetic pipeline 的 DirectUrl fake、CD2 HTTP fake、CD2 miss fallback、PlaybackManager/Session/controls/reporting/cleanup 证据保留。
 
 真实边界：当前 native-window automation surface 不可用，未继续启动播放器补齐手工点击证据，因此 `REAL SETTINGS UI: NOT COVERED — native window automation unavailable`。本分支未连接真实服务器，real cloud-first playback 与 real mount-first playback 均为 NOT COVERED；synthetic runtime/Node unit 不能替代真实验收。
 

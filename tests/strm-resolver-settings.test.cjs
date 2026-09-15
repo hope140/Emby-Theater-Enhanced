@@ -211,6 +211,41 @@ test('longest prefix matching selects the most specific enabled rule', () => {
     }, config), null);
 });
 
+test('sourcePath identity wins over a longer sidecar rule', () => {
+    const config = baseConfig(null, {
+        rules: [
+            baseRule({id: 'source-rule', sourcePrefix: '/media/115'}),
+            baseRule({id: 'sidecar-rule', sourcePrefix: 'C:\\Library\\4K'})
+        ]
+    });
+    const selected = strmResolver.selectRule({
+        sourcePath: '/media/115/Movies/Dune.mkv',
+        sidecarPath: 'C:\\Library\\4K\\Dune.mkv.strm'
+    }, config);
+    assert.equal(selected.id, 'source-rule');
+});
+
+test('valid absolute sourcePath with no match does not fall back to sidecar identity', () => {
+    const config = baseConfig(null, {
+        rules: [baseRule({id: 'sidecar-rule', sourcePrefix: 'C:\\Library\\4K'})]
+    });
+    assert.equal(strmResolver.selectRule({
+        sourcePath: '/other/storage/Dune.mkv',
+        sidecarPath: 'C:\\Library\\4K\\Dune.mkv.strm'
+    }, config), null);
+});
+
+test('HTTP sourcePath permits sidecar identity fallback', () => {
+    const config = baseConfig(null, {
+        rules: [baseRule({id: 'sidecar-rule', sourcePrefix: 'C:\\Library\\Show'})]
+    });
+    const selected = strmResolver.selectRule({
+        sourcePath: 'https://emby.example.test/videos/dune',
+        sidecarPath: 'C:\\Library\\Show\\Dune.mkv.strm'
+    }, config);
+    assert.equal(selected.id, 'sidecar-rule');
+});
+
 test('cloud-first uses DirectUrl before the other configured stages', async () => {
     const calls = [];
     const result = await strmResolver.resolveAsync(playbackContext('/media/115/Movies/Dune.mkv'), {

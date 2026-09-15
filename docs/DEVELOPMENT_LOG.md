@@ -1,5 +1,13 @@
 # 开发日志
 
+## 2026-09-15 — Fix STRM rule-selection identity precedence
+
+在 `feat/strm-resolver-settings@2956267` 上修复 `selectRule()`：可识别的绝对 `sourcePath` 现在独占 longest-prefix match；source 没有命中时直接返回 null，不再由更长的 `Item.Path` sidecar rule 接管。只有 HTTP/非绝对 source path 才使用 sidecar identity fallback。Windows/UNC case-insensitive、POSIX case-sensitive 和目录边界保持不变。
+
+新增 A/B/C regression tests，分别覆盖 source 命中优先、有效 source 无命中禁止 sidecar 接管、HTTP source 允许 sidecar fallback。未修改 PlaybackManager、Session、libmpv ownership、CD2 service 架构或配置 schema。
+
+验证：settings targeted 20/20；`npm test` 97/97；相关 JS syntax 与 `git diff --check` 通过。修复后按最终 HEAD 重建 runtime 的 provenance/package verify，并执行一次非可见 synthetic runtime pipeline；REAL settings UI 继续记录为 `NOT COVERED — native window automation unavailable`。
+
 ## 2026-09-15 — STRM resolver settings candidate
 
 Model Tier：2。Reason：跨 main-process persistent config/secret IPC、resolver rule ordering、Mount prefix replacement、DirectUrl/same-origin deadline reuse 和现有 libmpv source-only boundary；没有改变 PlaybackManager、Session、WebSocket 或 player ownership。Escalated：no。

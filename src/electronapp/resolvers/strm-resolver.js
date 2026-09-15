@@ -101,7 +101,9 @@
     }
 
     function selectRule(context, config) {
-        var values = [context && context.sourcePath, context && context.sidecarPath];
+        var sourcePath = context && context.sourcePath;
+        var sourcePrefix = pathRules.normalizeMappingPrefix(sourcePath);
+        var values = sourcePrefix ? [sourcePath] : [context && context.sidecarPath];
         var best = null;
         var bestLength = -1;
         var bestValueIndex = values.length;
