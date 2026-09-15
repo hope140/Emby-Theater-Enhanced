@@ -1,5 +1,17 @@
 # 开发日志
 
+## 2026-09-16 — Client Diagnostics v1
+
+Model Tier：2。Reason：任务跨 main-process logger/IPC、renderer/libmpv resolver 观测、CD2/Mount 事件和设置页，但明确禁止改变播放、Session、WebSocket 与 fallback contract。Escalated：no。
+
+从最新 `origin/main@aad4a0ddfd489cf0a9e3bf1f9b7af147d9376f38` 创建 `feat/client-diagnostics-log`。新增 `enhanced/diagnostics.js` 的统一 structured JSONL logger、2 MiB/3 层轮转、递归 sanitizer、路径/主机/设备哈希、畸形行容错和 TXT report builder；新增可信 `diagnostics-ipc.js` 处理状态、Electron save dialog 导出、打开目录和二次确认后的精确日志清空。日志根目录沿用 ETE bootstrap profile，正常运行路径为 `%APPDATA%\EmbyTheaterEnhanced\logs`。
+
+`main.js` 记录 app start/shutdown、版本/provenance/mpv 配置摘要，并把 CD2 service 接入 fail-open observability callback。`strm-resolver.js` 增加纯 route mapping；`libmpv.js` 记录 play request、resolver complete、route-selected、loadfile-requested、core-playing、pause/resume、seek、stop、error 及可自然获得的 next；CD2 记录 bounded resolve start/hit/miss/error/cancelled，Mount 记录 candidate count、reason、localExists 与 mappedPathHash。未修改 resolver precedence、source selection、timeout、Session、WebSocket、DeviceId、reporting、NextTrack 或既有 vendor Web UI。
+
+新增设置页 `mpvplayer/diagnostics.html/js/css`，只显示安全的简化目录说明；生成式 preload 只增加 path hash helper，不携带 token。更新 `docs/CLIENT_DIAGNOSTICS.md`、DECISIONS 与 libmpv runtime 说明。测试覆盖 Authorization/Bearer、X-Emby-Token、api key、Cookie、password、URL query、Windows/UNC/POSIX path、circular/undefined/null/huge Error、目录/追加/轮转失败、malformed JSONL、四 route、CD2 telemetry 和 trusted IPC。
+
+验证：本轮 targeted diagnostics/preload `10/10`，全量 `npm test` `118/118`；相关 JavaScript syntax 与 `git diff --check` 已通过。真实 Windows route 播放、TXT 导出、AI 判读、Session/remote observability 保持 `MANUAL ACCEPTANCE REQUIRED` 或 `DEFERRED OBSERVABILITY`，不以 synthetic 证据替代。
+
 ## 2026-09-15 — Stable Enhanced DeviceId
 
 Model Tier：2。Reason：真实服务器 A/B 已证明 OLD 的 hostname DeviceId 对应服务器状态不可远控，而仅换用独立 DeviceId 后同一 OLD runtime 可远控；本轮只实现持久化 DeviceId，不改 capability、ApiClient、WebSocket 或播放链。Escalated：no。

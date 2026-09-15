@@ -20,7 +20,7 @@ libmpv 来源随综合补丁内的说明为 [shinchiro 20260809 release](https:/
 
 记录 vo/current-vo、gpu-api/context、hwdec/current、scale/cscale/dscale/tscale、deband、interpolation、video-sync、target-colorspace-hint/trc/prim/peak、tone/gamut mapping、glsl-shaders、video-params/out-params、config/config-dir、sub-font/fonts-dir、demuxer-max-bytes。每字段 1500ms 超时，unsupported/null/timeout 均记录并继续；监听器在完成/失败/超时清理。
 
-新增日志是 Electron userData 下的 `enhanced-diagnostics.jsonl`，超过约 256KiB 轮转一个副本。媒体地址、Item 名称、认证信息不进入新增日志；shader/config/font 目录只记录是否配置及数量。Carnival 原有其他日志行为不属于本次全面脱敏审计。
+新增客户端日志位于 `%APPDATA%\EmbyTheaterEnhanced\logs\ete-client.jsonl`，使用 UTF-8 JSONL 追加写入；单文件约 2 MiB 后按 `.1`、`.2`、`.3` 轮转。媒体地址、Item 名称、认证信息不进入日志；shader/config/font 目录只记录是否配置及数量。日志写入使用异步 fail-open 队列，失败不会传播到播放链。Carnival 原有其他日志行为不属于本次全面脱敏审计；导出和隐私边界见 [CLIENT_DIAGNOSTICS](CLIENT_DIAGNOSTICS.md)。
 
 ## mpv.conf
 

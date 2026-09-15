@@ -25,6 +25,7 @@
 | 新输出目录 | 构建拒绝覆盖已有产物，避免修改运行中的客户端或丢失证据 |
 | Enhanced 独立数据目录 | Program Files 应用目录保持静态，与旧 Carnival 配置分离 |
 | 新增诊断有界且保持播放语义 | 不支持属性、IPC/日志错误不得阻塞播放；只使用自有瞬态 user-data 槽获取精确缓存文本，不改变媒体/缓存选项；新增日志不记录媒体地址 |
+| OBSERVABILITY MUST NOT AFFECT PLAYBACK | 客户端诊断只观察既有 resolver、CD2、Mount 和 libmpv 生命周期；日志、轮转、脱敏、导出或 IPC 失败均 fail-open，不改变 source、timeout、fallback、Session 或远控语义 |
 | 公开基线使用 GPL-2.0-only | 官方 Windows/Electron 对照仓库均附 GPL v2 文本；维护源码未证明 `or later` 授权，因此不扩大许可范围；未知 Carnival、Web snapshot 和二进制不进入首个公开提交 |
 | 模型按风险而非规模分级 | 默认 Tier 1（Luna）执行规格清楚的工作；Playback/Session/底层兼容等不确定任务才升 Tier 2（Sol）；Sol High 一轮仍无解或重大架构/许可风险才考虑 Tier 3（GPT-6） |
 

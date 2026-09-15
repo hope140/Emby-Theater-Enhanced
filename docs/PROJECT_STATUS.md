@@ -1,5 +1,15 @@
 # 项目状态
 
+## 2026-09-16 — Client Diagnostics v1
+
+基于 `origin/main@aad4a0ddfd489cf0a9e3bf1f9b7af147d9376f38` 创建分支 `feat/client-diagnostics-log`。本轮新增客户端诊断日志、统一脱敏、轮转、导出 IPC、设置页入口，以及 resolver/CD2/Mount/libmpv 的低风险结构化事件；产品版本保持 `0.1.1`。日志只替换可观测性，不改变 Resolver precedence、DirectUrl、CD2 timeout/budget、Mount 判定、PlaybackManager、Session、WebSocket、DeviceId、播放上报、NextTrack 或 WatchTogether。
+
+日志位置为 `%APPDATA%\EmbyTheaterEnhanced\logs\ete-client.jsonl`，UTF-8 JSONL 追加写入，约 2 MiB 后保留 `.1`、`.2`、`.3`。所有落盘记录统一经过 sanitizer；凭据、认证 query、完整 URL、完整媒体路径、Local Storage/Cookie database 和 `mpv.conf` 原文不落盘，路径与设备/会话标识只保留 16 位哈希。日志和导出失败 fail-open，不传播到播放链。
+
+设置页“诊断与日志”提供状态、导出 TXT、打开日志目录和二次确认清空。导出报告按轮转文件到当前文件顺序合并，并生成最近 route、CD2、Mount、Native fallback、core-playing 和 playback 摘要；不确定值写 `UNKNOWN`。当前自动回归为 `npm test 118/118`，其中本轮 diagnostics/preload targeted 为 `10/10`；构建、provenance、package 和候选安装包结果以本分支最终验证记录为准。
+
+真实 Windows 客户端各 route 播放、真实导出 TXT、AI 可判定性和 Session/remote 状态事件仍需人工验收；旧 upstream Web UI、`apiclient.js`、`connectionmanager.js`、PlaybackManager vendor snapshot 与 WebSocket 生命周期相关观测本轮保持 deferred。详细 contract 见 [CLIENT_DIAGNOSTICS](CLIENT_DIAGNOSTICS.md)。
+
 ## 2026-09-15 — Stable Enhanced DeviceId implementation
 
 分支 `fix/stable-enhanced-device-id` 基于 `origin/main@780aaed8ddc5bde42654e56e7635379f29f9e485`，未基于 `fix/product-session-identity`。本轮只将正式 ETE 的 DeviceId 从 `os.hostname()` 改为 ETE 自有 config 目录中持久化的随机 UUID；DeviceName 继续使用 hostname。缺失/损坏 identity 文件会原子重建，升级保留，clean profile 生成新值；不迁移旧 hostname DeviceId，不修改服务器 Device/Session、token、capability、WebSocket 或播放链。`app.setName/productName` 不在本分支范围。
