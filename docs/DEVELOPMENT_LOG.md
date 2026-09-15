@@ -6,7 +6,7 @@ Model Tier：1。Reason：本轮仅记录用户完成的 Windows 真实安装后
 
 原候选验收记录为 `NON-BLOCKING FAIL — launcher UX`，问题是 `PowerShell wrapper caused visible console flash and startup delay`。用户已确认新候选四种真实入口全部通过：installer post-install Launch、desktop shortcut、Start Menu shortcut、直接 `Emby.Theater.exe` 均为 `REAL PASS`；四入口均无命令窗口闪烁，启动体验正常，既有 Emby 登录状态保留。
 
-本项结论更新为 `REAL PASS — direct app launch`。Daily-use Candidate 整体不升级为最终 `READY`；其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目仍按原有 REAL/SYNTHETIC/NOT COVERED 证据记录。保留 final HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的代码、build/provenance/package/integrity 证据；hidden Electron smoke 未重跑。
+本项结论更新为 `REAL PASS — direct app launch`。Daily-use Candidate 整体不升级为最终 `READY`；其他 playback、STRM、audio、subtitle、NextTrack 和 endurance 项目仍按原有 REAL/SYNTHETIC/NOT COVERED 证据记录。保留 code/package HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的代码、build/provenance/package/integrity 证据；后续 `8bb79341490aaba3404db2a6411510d66a7b8bef` 及本轮文档修正均为 docs-only，不改变 artifact 内容；hidden Electron smoke 未重跑。
 
 ## 2026-09-15 — Direct app launch Daily-use Candidate 修复
 
@@ -16,7 +16,7 @@ Model Tier：1。Reason：范围限定为 Electron main-process bootstrap、inst
 
 新增 `src/electronapp/enhanced/bootstrap.js`，由 main process 在窗口创建前按实际 packaged layout `{runtime}\electronapp\main.js` → `{runtime}\config\system.xml` 执行幂等初始化：创建 `%APPDATA%\EmbyTheaterEnhanced\config` 与 `cec-driver`，只为缺失的 `system.xml` seed，为缺失的 `cec-driver\cancel` 创建空文件；既有用户文件保持原样。`ProgramDataPath` 未改，未引入外部进程。`Start-Enhanced.ps1/.cmd` 保留为源码工具，但不再由 `tools/build.ps1` 复制进正式 runtime，provenance scope 同步移除 wrapper entries。
 
-验证：bootstrap/installer targeted 3/3；相关 targeted 合并检查 5/5；全量 `npm test` 101/101；68 个 JavaScript/CJS syntax、11 个 PowerShell syntax、`git diff --check` 通过。候选 runtime/package 路径固定，最终 HEAD 的 source build、provenance、package verify 和 Inno payload integrity 均通过；runtime 实际 2,123 文件、payload entries 2,122，解包 `{app}` 2,123 文件 missing/extra/hash mismatch=0，legacy launcher=0，packaged bootstrap seed/preserve 隔离检查通过。真实安装后的桌面、开始菜单、安装完成 Launch 和直接 exe 四入口仍待用户手工验收，当前不写 REAL PASS。
+验证：bootstrap/installer targeted 3/3；相关 targeted 合并检查 5/5；全量 `npm test` 101/101；68 个 JavaScript/CJS syntax、11 个 PowerShell syntax、`git diff --check` 通过。候选 runtime/package 路径固定，code/package HEAD `b16273c71de5e671f1c38e4b355edb72382ec137` 的 source build、provenance、package verify 和 Inno payload integrity 均通过；runtime 实际 2,123 文件、payload entries 2,122，解包 `{app}` 2,123 文件 missing/extra/hash mismatch=0，legacy launcher=0，packaged bootstrap seed/preserve 隔离检查通过。后续 docs-only commit 不要求重新 build/package/test。真实安装后的桌面、开始菜单、安装完成 Launch 和直接 exe 四入口已记录为 `REAL PASS`，但整体 Daily-use Candidate 仍不写最终 `READY`。
 
 ## 2026-09-15 — Daily-use Candidate 验证与打包准备
 
